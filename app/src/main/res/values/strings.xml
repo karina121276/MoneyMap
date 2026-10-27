@@ -1,0 +1,140 @@
+<resources>
+    <string name="app_name">MoneyMap</string>
+    <string name="tagline">Track • Plan • Grow</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_accounts">Accounts</string>
+    <string name="nav_add">Add</string>
+    <string name="nav_history">History</string>
+    <string name="nav_reports">Reports</string>
+    <string name="nav_budgets">Budgets</string>
+    <string name="nav_calendar">Calendar</string>
+    <string name="nav_settings">Settings</string>
+    <string name="nav_smart_entry">Smart Entry</string>
+
+    <!-- Common Actions -->
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="edit">Edit</string>
+    <string name="delete">Delete</string>
+    <string name="duplicate">Duplicate</string>
+    <string name="search">Search</string>
+    <string name="filter">Filter</string>
+    <string name="all">All</string>
+    <string name="see_all">See All</string>
+    <string name="skip">Skip</string>
+    <string name="next">Next</string>
+    <string name="back">Back</string>
+    <string name="get_started">Get Started</string>
+    <string name="confirm">Confirm</string>
+    <string name="retry">Retry</string>
+
+    <!-- Transaction Types -->
+    <string name="type_expense">Expense</string>
+    <string name="type_income">Income</string>
+    <string name="type_transfer">Transfer</string>
+
+    <!-- Account Types -->
+    <string name="account_bank">Bank</string>
+    <string name="account_cash">Cash</string>
+    <string name="account_wallet">Wallet</string>
+    <string name="account_credit_card">Credit Card</string>
+
+    <!-- Financial Metrics -->
+    <string name="total_balance">Total Balance</string>
+    <string name="net_worth">Net Worth</string>
+    <string name="income_label">Income</string>
+    <string name="expenses_label">Expenses</string>
+    <string name="savings_label">Savings</string>
+    <string name="savings_rate">Savings Rate</string>
+    <string name="net_flow">Net Flow</string>
+    <string name="spent">Spent</string>
+    <string name="remaining">Remaining</string>
+    <string name="daily_limit">Daily limit</string>
+
+    <!-- Smart Entry -->
+    <string name="smart_entry_title">Smart Entry</string>
+    <string name="smart_entry_subtitle">Add transactions in seconds</string>
+    <string name="add_manually">Add Manually</string>
+    <string name="add_manually_desc">Enter income, expense or transfer</string>
+    <string name="from_screenshot">From Screenshot</string>
+    <string name="from_screenshot_desc">Share UPI payment screenshot from any app</string>
+    <string name="scan_receipt">Scan Receipt</string>
+    <string name="scan_receipt_desc">Take a photo or choose from gallery</string>
+    <string name="import_pdf">Import PDF Statement</string>
+    <string name="import_pdf_desc">Import bank statement (PDF)</string>
+    <string name="local_processing_badge">100% Private &amp; Offline</string>
+    <string name="local_processing_desc">We process screenshots, receipts and statements locally. No bank logins, no SMS access, no data uploaded.</string>
+
+    <!-- Settings & Preferences -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_appearance">Appearance</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_system">System default</string>
+    <string name="settings_accent_color">Accent Color</string>
+    <string name="settings_language">Language</string>
+    <string name="lang_en">English</string>
+    <string name="lang_hi">Hindi</string>
+    <string name="lang_mr">Marathi</string>
+    <string name="settings_app_preferences">App Preferences</string>
+    <string name="pref_currency">Currency</string>
+    <string name="pref_currency_inr">Indian Rupee (₹)</string>
+    <string name="pref_currency_usd">US Dollar ($)</string>
+    <string name="pref_currency_eur">Euro (€)</string>
+    <string name="pref_currency_gbp">British Pound (£)</string>
+    <string name="pref_date_format">Date Format</string>
+    <string name="pref_first_day_of_week">First Day of Week</string>
+    <string name="day_monday">Monday</string>
+    <string name="day_sunday">Sunday</string>
+    <string name="pref_number_format">Number Format</string>
+    <string name="num_format_indian">Indian (1,23,456)</string>
+    <string name="num_format_international">International (123,456)</string>
+    <string name="settings_categories">Categories</string>
+    <string name="settings_backup_restore">Backup &amp; Restore</string>
+    <string name="settings_app_lock_privacy">App Lock &amp; Privacy</string>
+    <string name="settings_widget_settings">Widget Settings</string>
+    <string name="widget_theme">Widget Theme</string>
+    <string name="widget_hide_amounts">Hide Amounts on Widget</string>
+    <string name="about_moneymap_desc">Offline Personal Finance • Track • Plan • Grow</string>
+    <string name="select_currency">Select Currency</string>
+    <string name="select_date_format">Select Date Format</string>
+    <string name="select_first_day">Select First Day of Week</string>
+    <string name="select_number_format">Select Number Format</string>
+    <string name="close">Close</string>
+
+    <!-- Widgets -->
+    <string name="widget_quick_actions_title">Quick Actions</string>
+    <string name="widget_quick_actions_desc">Add expense, income or transfer instantly</string>
+    <string name="widget_recent_tx_title">Recent Transactions</string>
+    <string name="widget_recent_tx_desc">View recent transactions and open history</string>
+
+    <!-- Categories Screen -->
+    <string name="categories_title">Categories</string>
+    <string name="add_category">Add Category</string>
+    <string name="edit_category">Edit Category</string>
+    <string name="delete_category">Delete Category</string>
+    <string name="category_name">Category Name</string>
+    <string name="category_type">Category Type</string>
+    <string name="icon_picker">Icon Picker</string>
+    <string name="color_picker">Color Picker</string>
+    <string name="default_categories">Default Categories</string>
+    <string name="custom_categories">Custom Categories</string>
+    <string name="archived_categories">Archived Categories</string>
+    <string name="no_categories">No categories found</string>
+
+    <!-- Transaction Screens -->
+    <string name="transactions_title">Transaction History</string>
+    <string name="transaction_details_title">Transaction Details</string>
+    <string name="add_transaction_title">Add Transaction</string>
+    <string name="edit_transaction_title">Edit Transaction</string>
+    <string name="no_transactions">No transactions found</string>
+    <string name="search_placeholder">Search transactions, payees...</string>
+    <string name="amount_label">Amount</string>
+    <string name="account_label">Account</string>
+    <string name="category_label">Category</string>
+    <string name="date_label">Date</string>
+    <string name="notes_label">Notes</string>
+    <string name="payment_mode_label">Payment Mode</string>
+</resources>

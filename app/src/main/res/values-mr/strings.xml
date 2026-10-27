@@ -1,0 +1,134 @@
+<resources>
+    <string name="app_name">MoneyMap</string>
+    <string name="tagline">ट्रॅक • प्लॅन • ग्रो</string>
+    
+    <!-- Navigation -->
+    <string name="nav_home">होम</string>
+    <string name="nav_accounts">खाती</string>
+    <string name="nav_add">जोडा</string>
+    <string name="nav_history">इतिहास</string>
+    <string name="nav_reports">अहवाल</string>
+    <string name="nav_budgets">बजेट</string>
+    <string name="nav_calendar">कॅलेंडर</string>
+    <string name="nav_settings">सेटिंग्ज</string>
+    <string name="nav_smart_entry">स्मार्ट एंट्री</string>
+    
+    <!-- Common Actions -->
+    <string name="save">जतन करा</string>
+    <string name="cancel">रद्द करा</string>
+    <string name="edit">संपादित करा</string>
+    <string name="delete">हटवा</string>
+    <string name="duplicate">प्रत बनवा</string>
+    <string name="search">शोधा</string>
+    <string name="filter">फिल्टर</string>
+    <string name="all">सर्व</string>
+    <string name="see_all">सर्व पहा</string>
+    <string name="skip">वगळा</string>
+    <string name="next">पुढे</string>
+    <string name="back">मागे</string>
+    <string name="get_started">सुरू करा</string>
+    <string name="confirm">नक्की करा</string>
+    <string name="retry">पुन्हा प्रयत्न करा</string>
+    
+    <!-- Transaction Types -->
+    <string name="type_expense">खर्च</string>
+    <string name="type_income">उत्पन्न</string>
+    <string name="type_transfer">ट्रान्सफर</string>
+    
+    <!-- Account Types -->
+    <string name="account_bank">बँक</string>
+    <string name="account_cash">रोख</string>
+    <string name="account_wallet">वॉलेट</string>
+    <string name="account_credit_card">क्रेडिट कार्ड</string>
+    
+    <!-- Financial Metrics -->
+    <string name="total_balance">एकूण शिल्लक</string>
+    <string name="net_worth">नेट वर्थ</string>
+    <string name="income_label">उत्पन्न</string>
+    <string name="expenses_label">खर्च</string>
+    <string name="savings_label">बचत</string>
+    <string name="savings_rate">बचत दर</string>
+    <string name="net_flow">एकूण प्रवाह</string>
+    <string name="spent">खर्च केले</string>
+    <string name="remaining">उर्वरित</string>
+    <string name="daily_limit">दैनिक मर्यादा</string>
+    
+    <!-- Smart Entry -->
+    <string name="smart_entry_title">स्मार्ट एंट्री</string>
+    <string name="smart_entry_subtitle">क्षणार्धात व्यवहार जोडा</string>
+    <string name="add_manually">मॅन्युअली जोडा</string>
+    <string name="add_manually_desc">उत्पन्न, खर्च किंवा ट्रान्सफर प्रविष्ट करा</string>
+    <string name="from_screenshot">स्क्रीनशॉटवरून</string>
+    <string name="from_screenshot_desc">कोणत्याही अॅपवरून यूपीआय स्क्रीनशॉट शेअर करा</string>
+    <string name="scan_receipt">पावती स्कॅन करा</string>
+    <string name="scan_receipt_desc">फोटो घ्या किंवा गॅलरीतून निवडा</string>
+    <string name="import_pdf">पीडीएफ स्टेटमेंट आयात करा</string>
+    <string name="import_pdf_desc">बँक स्टेटमेंट (पीडीएफ) आयात करा</string>
+    <string name="local_processing_badge">100% खाजगी आणि ऑफलाइन</string>
+    <string name="local_processing_desc">आम्ही स्क्रीनशॉट, पावत्या आणि स्टेटमेंट्स स्थानिक पातळीवर प्रक्रिया करतो. कोणताही बँक लॉगिन नाही.</string>
+
+    <!-- Settings & Preferences -->
+    <string name="settings_title">सेटिंग्ज</string>
+    <string name="settings_appearance">दिसणे</string>
+    <string name="theme_light">लाइट</string>
+    <string name="theme_dark">डार्क</string>
+    <string name="theme_system">सिस्टम डीफॉल्ट</string>
+    <string name="settings_accent_color">अॅक्सेंट रंग</string>
+    <string name="settings_language">भाषा</string>
+    <string name="lang_en">English</string>
+    <string name="lang_hi">हिंदी</string>
+    <string name="lang_mr">मराठी</string>
+    <string name="settings_app_preferences">अॅप प्राधान्ये</string>
+    <string name="pref_currency">चलन</string>
+    <string name="pref_currency_inr">भारतीय रुपया (₹)</string>
+    <string name="pref_currency_usd">अमेरिकन डॉलर ($)</string>
+    <string name="pref_currency_eur">युरो (€)</string>
+    <string name="pref_currency_gbp">ब्रिटिश पाउंड (£)</string>
+    <string name="pref_date_format">तारीख स्वरूप</string>
+    <string name="pref_first_day_of_week">आठवड्याचा पहिला दिवस</string>
+    <string name="day_monday">सोमवार</string>
+    <string name="day_sunday">रविवार</string>
+    <string name="pref_number_format">संख्या स्वरूप</string>
+    <string name="num_format_indian">भारतीय (1,23,456)</string>
+    <string name="num_format_international">आंतरराष्ट्रीय (123,456)</string>
+    <string name="settings_categories">श्रेण्या</string>
+    <string name="settings_backup_restore">बॅकअप आणि पुनर्संचयित करा</string>
+    <string name="settings_app_lock_privacy">अॅप लॉक आणि गोपनीयता</string>
+    <string name="settings_widget_settings">विजेट सेटिंग्ज</string>
+    <string name="widget_theme">विजेट थीम</string>
+    <string name="widget_hide_amounts">विजेटवर रक्कम लपवा</string>
+    <string name="about_moneymap_desc">ऑफलाइन वैयक्तिक वित्त • ट्रॅक • प्लॅन • ग्रो</string>
+    <string name="select_currency">चलन निवडा</string>
+    <string name="select_date_format">तारीख स्वरूप निवडा</string>
+    <string name="select_first_day">आठवड्याचा पहिला दिवस निवडा</string>
+    <string name="select_number_format">संख्या स्वरूप निवडा</string>
+    <string name="close">बंद करा</string>
+
+    <!-- Categories Screen -->
+    <string name="categories_title">श्रेण्या</string>
+    <string name="add_category">श्रेणी जोडा</string>
+    <string name="edit_category">श्रेणी संपादित करा</string>
+    <string name="delete_category">श्रेणी हटवा</string>
+    <string name="category_name">श्रेणीचे नाव</string>
+    <string name="category_type">श्रेणी प्रकार</string>
+    <string name="icon_picker">आयकॉन निवडा</string>
+    <string name="color_picker">रंग निवडा</string>
+    <string name="default_categories">डीफॉल्ट श्रेण्या</string>
+    <string name="custom_categories">सानुकूल श्रेण्या</string>
+    <string name="archived_categories">संग्रहित श्रेण्या</string>
+    <string name="no_categories">कोणतीही श्रेणी आढळली नाही</string>
+
+    <!-- Transaction Screens -->
+    <string name="transactions_title">व्यवहार इतिहास</string>
+    <string name="transaction_details_title">व्यवहार तपशील</string>
+    <string name="add_transaction_title">व्यवहार जोडा</string>
+    <string name="edit_transaction_title">व्यवहार संपादित करा</string>
+    <string name="no_transactions">कोणतेही व्यवहार आढळले नाहीत</string>
+    <string name="search_placeholder">व्यवहार, प्राप्तकर्ता शोधा...</string>
+    <string name="amount_label">रक्कम</string>
+    <string name="account_label">खाते</string>
+    <string name="category_label">श्रेणी</string>
+    <string name="date_label">तारीख</string>
+    <string name="notes_label">नोंदी</string>
+    <string name="payment_mode_label">पेमेंट पद्धत</string>
+</resources>
