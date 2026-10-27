@@ -55,7 +55,7 @@
             android:label="Quick Actions">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="com.example.ACTION_MONEYMAP_DATA_CHANGED" />
+                <action android:name="com.thecorporatedeveloper.moneymap.ACTION_MONEYMAP_DATA_CHANGED" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
@@ -69,7 +69,7 @@
             android:label="Recent Transactions">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="com.example.ACTION_MONEYMAP_DATA_CHANGED" />
+                <action android:name="com.thecorporatedeveloper.moneymap.ACTION_MONEYMAP_DATA_CHANGED" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
