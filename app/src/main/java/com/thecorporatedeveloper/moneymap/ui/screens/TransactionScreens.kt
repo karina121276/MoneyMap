@@ -45,7 +45,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AddEditTransactionScreen(
     initialTransaction: TransactionEntity? = null,
@@ -324,11 +324,12 @@ fun AddEditTransactionScreen(
                                 }
                             }
                         } else {
-                            androidx.compose.foundation.lazy.LazyRow(
+                            FlowRow(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                items(filteredCategories, key = { it.id }) { cat ->
+                                filteredCategories.forEach { cat ->
                                     val isSel = selectedCategoryId == cat.id
                                     val catCol = parseColorHex(cat.colorHex, MoneyMapBlue)
                                     FilterChip(
@@ -345,15 +346,13 @@ fun AddEditTransactionScreen(
                                         label = { Text(cat.name, fontSize = 12.sp) }
                                     )
                                 }
-                                item {
-                                    AssistChip(
-                                        onClick = onNavigateToCategories,
-                                        leadingIcon = {
-                                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
-                                        },
-                                        label = { Text("+ Category", fontSize = 12.sp) }
-                                    )
-                                }
+                                AssistChip(
+                                    onClick = onNavigateToCategories,
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    },
+                                    label = { Text("+ Category", fontSize = 12.sp) }
+                                )
                             }
                         }
                     }

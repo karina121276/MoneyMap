@@ -87,6 +87,7 @@ class QuickAddActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun QuickAddContent(
     modifier: Modifier = Modifier,
@@ -247,14 +248,14 @@ fun QuickAddContent(
                     .fillMaxWidth()
                     .padding(vertical = 4.dp)
             )
-            androidx.compose.foundation.lazy.LazyRow(
+            FlowRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(filteredCats.size) { index ->
-                    val cat = filteredCats[index]
+                filteredCats.forEach { cat ->
                     val isSel = selectedCategoryId == cat.id
                     FilterChip(
                         selected = isSel,

@@ -57,6 +57,7 @@ fun SettingsScreen(
     onBack: () -> Unit
 ) {
     val currentAccent = parseColorHex(preferences.accentColorHex, MoneyMapBlue)
+    val context = LocalContext.current
 
     var showPrivacyDialog by remember { mutableStateOf(false) }
     var showTermsDialog by remember { mutableStateOf(false) }
@@ -155,7 +156,19 @@ fun SettingsScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Column {
-                        SettingsRow(icon = Icons.Default.PrivacyTip, title = "Privacy Policy", onClick = { showPrivacyDialog = true })
+                        SettingsRow(
+                            icon = Icons.Default.PrivacyTip,
+                            title = "Privacy Policy",
+                            onClick = {
+                                val url = "https://doc-hosting.flycricket.io/moneymap-privacy-policy/01d50b25-5834-403b-be59-1c0967a0c3d4/privacy"
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "No web browser available to open Privacy Policy", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        )
                         HorizontalDivider(color = BorderSubtle.copy(alpha = 0.5f))
                         SettingsRow(icon = Icons.Default.Description, title = "Terms of Service", onClick = { showTermsDialog = true })
                         HorizontalDivider(color = BorderSubtle.copy(alpha = 0.5f))
