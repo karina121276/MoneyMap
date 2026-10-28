@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.thecorporatedeveloper.moneymap.core.model.CurrencyFormatter
+import com.thecorporatedeveloper.moneymap.core.model.TransactionType
 import com.thecorporatedeveloper.moneymap.data.entity.AccountEntity
 import com.thecorporatedeveloper.moneymap.data.entity.CategoryEntity
 import com.thecorporatedeveloper.moneymap.data.entity.TransactionEntity
@@ -32,6 +33,8 @@ import com.thecorporatedeveloper.moneymap.ui.components.TransactionItemRow
 import com.thecorporatedeveloper.moneymap.ui.components.MoneySproutIllustration
 import com.thecorporatedeveloper.moneymap.ui.theme.*
 import java.time.YearMonth
+import java.time.ZoneId
+import java.time.Instant
 
 @Composable
 fun DashboardScreen(
@@ -73,6 +76,27 @@ fun DashboardScreen(
     val currentMonthBudget = remember(budgets) {
         val currentMonthKey = YearMonth.now().toString()
         budgets.find { it.monthYear == currentMonthKey }
+    }
+
+    val currentMonthBudgetSpent = remember(transactions, currentMonthBudget) {
+        if (currentMonthBudget == null) 0L
+        else {
+            val ym = try { YearMonth.parse(currentMonthBudget.monthYear) } catch (e: Exception) { YearMonth.now() }
+            val zone = ZoneId.systemDefault()
+            val start = ym.atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
+            val end = ym.atEndOfMonth().atTime(23, 59, 59).atZone(zone).toInstant().toEpochMilli()
+            transactions.filter { tx ->
+                tx.type == TransactionType.EXPENSE &&
+                        tx.dateEpochMillis in start..end &&
+                        tx.dateEpochMillis >= (if (currentMonthBudget.startDateEpochMillis > 0L) currentMonthBudget.startDateEpochMillis else start) &&
+                        when (currentMonthBudget.scope) {
+                            "ACCOUNT" -> tx.accountId == currentMonthBudget.accountId
+                            "CATEGORY" -> tx.categoryId == currentMonthBudget.categoryId
+                            "ACCOUNT_CATEGORY" -> tx.accountId == currentMonthBudget.accountId && tx.categoryId == currentMonthBudget.categoryId
+                            else -> true
+                        }
+            }.sumOf { it.amountPaise }
+        }
     }
 
     Scaffold { innerPadding ->
@@ -399,7 +423,7 @@ fun DashboardScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (currentMonthBudget != null && currentMonthBudget.effectiveLimitPaise > 0L) {
-                            val ratio = (periodSummary.totalExpensePaise.toFloat() / currentMonthBudget.effectiveLimitPaise).coerceIn(0f, 1f)
+                            val ratio = (currentMonthBudgetSpent.toFloat() / currentMonthBudget.effectiveLimitPaise).coerceIn(0f, 1f)
                             val pct = (ratio * 100).toInt()
                             val progressCol = if (ratio > 0.9f) MoneyMapRed else if (ratio > 0.75f) MoneyMapOrange else MoneyMapGreen
 
@@ -420,7 +444,7 @@ fun DashboardScreen(
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "$pct% used (${CurrencyFormatter.formatRupees(periodSummary.totalExpensePaise, hideAmounts)} / ${CurrencyFormatter.formatRupees(currentMonthBudget.effectiveLimitPaise, hideAmounts)})",
+                                    text = "$pct% used (${CurrencyFormatter.formatRupees(currentMonthBudgetSpent, hideAmounts)} / ${CurrencyFormatter.formatRupees(currentMonthBudget.effectiveLimitPaise, hideAmounts)})",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = TextSecondary
                                 )

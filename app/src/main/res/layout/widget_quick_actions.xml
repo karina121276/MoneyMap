@@ -5,13 +5,13 @@
     android:layout_height="match_parent"
     android:background="@drawable/bg_widget_card"
     android:orientation="vertical"
-    android:padding="10dp">
+    android:padding="12dp">
 
     <!-- Top Header -->
     <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="8dp">
+        android:layout_marginBottom="10dp">
 
         <LinearLayout
             android:id="@+id/widget_quick_brand"
@@ -23,34 +23,34 @@
             android:orientation="horizontal">
 
             <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
                 android:contentDescription="MoneyMap Logo"
                 android:src="@drawable/moneymap_logo" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
+                android:layout_marginStart="8dp"
                 android:text="MoneyMap"
                 android:textColor="#0F172A"
-                android:textSize="13sp"
+                android:textSize="14sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
         <ImageView
             android:id="@+id/btn_widget_quick_settings"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
             android:layout_alignParentEnd="true"
             android:layout_centerVertical="true"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="Settings"
-            android:padding="3dp"
+            android:padding="5dp"
             android:src="@drawable/ic_widget_settings" />
     </RelativeLayout>
 
-    <!-- 3 Action Buttons -->
+    <!-- 3 Action Cards -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -63,19 +63,19 @@
             android:id="@+id/btn_widget_add_expense"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_marginEnd="4dp"
+            android:layout_marginEnd="6dp"
             android:layout_weight="1"
             android:background="@drawable/bg_widget_btn_expense"
             android:clickable="true"
             android:focusable="true"
             android:gravity="center"
             android:orientation="horizontal"
-            android:paddingHorizontal="6dp"
+            android:paddingHorizontal="4dp"
             android:paddingVertical="4dp">
 
             <ImageView
-                android:layout_width="16dp"
-                android:layout_height="16dp"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
                 android:contentDescription="Add Expense"
                 android:src="@drawable/ic_widget_add_expense" />
 
@@ -94,19 +94,19 @@
             android:id="@+id/btn_widget_add_income"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_marginEnd="4dp"
+            android:layout_marginEnd="6dp"
             android:layout_weight="1"
             android:background="@drawable/bg_widget_btn_income"
             android:clickable="true"
             android:focusable="true"
             android:gravity="center"
             android:orientation="horizontal"
-            android:paddingHorizontal="6dp"
+            android:paddingHorizontal="4dp"
             android:paddingVertical="4dp">
 
             <ImageView
-                android:layout_width="16dp"
-                android:layout_height="16dp"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
                 android:contentDescription="Add Income"
                 android:src="@drawable/ic_widget_add_income" />
 
@@ -131,12 +131,12 @@
             android:focusable="true"
             android:gravity="center"
             android:orientation="horizontal"
-            android:paddingHorizontal="6dp"
+            android:paddingHorizontal="4dp"
             android:paddingVertical="4dp">
 
             <ImageView
-                android:layout_width="16dp"
-                android:layout_height="16dp"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
                 android:contentDescription="Transfer"
                 android:src="@drawable/ic_widget_transfer" />
 
