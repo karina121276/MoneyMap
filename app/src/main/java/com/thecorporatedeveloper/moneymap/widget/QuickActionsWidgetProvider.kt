@@ -47,50 +47,73 @@ class QuickActionsWidgetProvider : AppWidgetProvider() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             views.setOnClickPendingIntent(R.id.widget_quick_root, homePendingIntent)
+            views.setOnClickPendingIntent(R.id.widget_quick_brand, homePendingIntent)
 
-            // 2. Add Expense -> Add Transaction prefilled with Expense
-            val expenseIntent = Intent(context, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                putExtra("route", "add_transaction")
-                putExtra("type", "EXPENSE")
-            }
-            val expensePendingIntent = PendingIntent.getActivity(
-                context, widgetId * 10 + 2, expenseIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            views.setOnClickPendingIntent(R.id.btn_widget_add_expense, expensePendingIntent)
-
-            // 3. Add Income -> Add Transaction prefilled with Income
+            // 2. Add Income -> Add Transaction prefilled with Income
             val incomeIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 putExtra("route", "add_transaction")
                 putExtra("type", "INCOME")
             }
             val incomePendingIntent = PendingIntent.getActivity(
-                context, widgetId * 10 + 3, incomeIntent,
+                context, widgetId * 10 + 2, incomeIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             views.setOnClickPendingIntent(R.id.btn_widget_add_income, incomePendingIntent)
 
-            // 4. Transfer -> Add Transaction prefilled with Transfer
+            // 3. Add Expense -> Add Transaction prefilled with Expense
+            val expenseIntent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra("route", "add_transaction")
+                putExtra("type", "EXPENSE")
+            }
+            val expensePendingIntent = PendingIntent.getActivity(
+                context, widgetId * 10 + 3, expenseIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            views.setOnClickPendingIntent(R.id.btn_widget_add_expense, expensePendingIntent)
+
+            // 4. Add Screenshot / Smart Entry -> Smart Entry screen
+            val screenshotIntent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra("route", "smart_entry")
+            }
+            val screenshotPendingIntent = PendingIntent.getActivity(
+                context, widgetId * 10 + 4, screenshotIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            views.setOnClickPendingIntent(R.id.btn_widget_add_screenshot, screenshotPendingIntent)
+
+            // 5. Add Transfer -> Add Transaction prefilled with Transfer
             val transferIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 putExtra("route", "add_transaction")
                 putExtra("type", "TRANSFER")
             }
             val transferPendingIntent = PendingIntent.getActivity(
-                context, widgetId * 10 + 4, transferIntent,
+                context, widgetId * 10 + 5, transferIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-            views.setOnClickPendingIntent(R.id.btn_widget_transfer, transferPendingIntent)
+            views.setOnClickPendingIntent(R.id.btn_widget_add_transfer, transferPendingIntent)
 
-            // 5. Settings -> Settings Screen
+            // 6. View Transactions -> History screen
+            val transactionsIntent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra("route", "history")
+            }
+            val transactionsPendingIntent = PendingIntent.getActivity(
+                context, widgetId * 10 + 6, transactionsIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            views.setOnClickPendingIntent(R.id.btn_widget_view_transactions, transactionsPendingIntent)
+
+            // 7. Settings -> Settings Screen
             val settingsIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                 putExtra("route", "settings")
             }
             val settingsPendingIntent = PendingIntent.getActivity(
-                context, widgetId * 10 + 5, settingsIntent,
+                context, widgetId * 10 + 7, settingsIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             views.setOnClickPendingIntent(R.id.btn_widget_quick_settings, settingsPendingIntent)

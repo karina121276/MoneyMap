@@ -8,77 +8,119 @@ import java.util.Locale
  * All monetary amounts are strictly maintained as Long integer paise (1 INR = 100 paise).
  */
 object CurrencyFormatter {
-    private val indianLocale = Locale("en", "IN")
+    private val standardLocale = Locale.US
+    @Volatile
+    private var globalCurrencyCode: String = "INR"
 
-    /**
-     * Formats integer paise into standard Indian Rupee string (e.g. 12432000 paise -> "₹1,24,320")
-     */
+    fun setActiveCurrency(code: String) {
+        globalCurrencyCode = code
+    }
+
+    fun getActiveCurrency(): String = globalCurrencyCode
+
+    // Overloaded formatRupees for backward compatibility
     fun formatRupees(
         paise: Long,
         showDecimals: Boolean = false,
         showSign: Boolean = false,
         hideAmounts: Boolean = false
+    ): String = formatRupees(paise, globalCurrencyCode, showDecimals, showSign, hideAmounts)
+
+    fun formatRupees(
+        paise: Long,
+        currencyCode: String,
+        showDecimals: Boolean = false,
+        showSign: Boolean = false,
+        hideAmounts: Boolean = false
     ): String {
         if (hideAmounts) return "••••••"
+        val currencyInfo = CurrencyRepository.getCurrency(currencyCode)
+        val symbol = currencyInfo.symbol
         val isNegative = paise < 0
         val absPaise = kotlin.math.abs(paise)
-        val rupees = absPaise / 100
-        val remainingPaise = absPaise % 100
+        val units = absPaise / 100
+        val remaining = absPaise % 100
 
-        val formattedRupees = formatIndianGrouping(rupees)
-        val prefix = when {
-            showSign && isNegative -> "-₹"
-            showSign && paise > 0 -> "+₹"
-            isNegative -> "-₹"
-            else -> "₹"
+        val formattedUnits = if (isIndianGrouping(currencyCode)) {
+            formatIndianGrouping(units)
+        } else {
+            NumberFormat.getNumberInstance(standardLocale).format(units)
         }
 
-        return if (showDecimals && remainingPaise > 0) {
-            String.format(indianLocale, "%s%s.%02d", prefix, formattedRupees, remainingPaise)
+        val prefix = when {
+            showSign && isNegative -> "-$symbol"
+            showSign && paise > 0 -> "+$symbol"
+            isNegative -> "-$symbol"
+            else -> symbol
+        }
+
+        return if (showDecimals && remaining > 0) {
+            String.format(standardLocale, "%s%s.%02d", prefix, formattedUnits, remaining)
         } else {
-            "$prefix$formattedRupees"
+            "$prefix$formattedUnits"
         }
     }
 
-    /**
-     * Formats transaction amount with explicit sign per transaction type using Indian grouping.
-     * Expense: -₹2,000, Income: +₹350, Transfer: ₹3,000
-     */
+    // Overloaded formatTransactionAmount for backward compatibility
     fun formatTransactionAmount(
         paise: Long,
         type: TransactionType,
         hideAmounts: Boolean = false
+    ): String = formatTransactionAmount(paise, type, globalCurrencyCode, hideAmounts)
+
+    fun formatTransactionAmount(
+        paise: Long,
+        type: TransactionType,
+        currencyCode: String,
+        hideAmounts: Boolean = false
     ): String {
         if (hideAmounts) return "••••••"
+        val currencyInfo = CurrencyRepository.getCurrency(currencyCode)
+        val symbol = currencyInfo.symbol
         val absPaise = kotlin.math.abs(paise)
-        val rupees = absPaise / 100
-        val formattedRupees = formatIndianGrouping(rupees)
+        val units = absPaise / 100
+        val formattedUnits = if (isIndianGrouping(currencyCode)) {
+            formatIndianGrouping(units)
+        } else {
+            NumberFormat.getNumberInstance(standardLocale).format(units)
+        }
         return when (type) {
-            TransactionType.EXPENSE -> "-₹$formattedRupees"
-            TransactionType.INCOME -> "+₹$formattedRupees"
-            TransactionType.TRANSFER -> "₹$formattedRupees"
+            TransactionType.EXPENSE -> "-$symbol$formattedUnits"
+            TransactionType.INCOME -> "+$symbol$formattedUnits"
+            TransactionType.TRANSFER -> "$symbol$formattedUnits"
         }
     }
 
-    /**
-     * Compact formatting for charts/widgets (e.g., ₹85K, ₹1.2L)
-     */
-    fun formatCompactRupees(paise: Long, hideAmounts: Boolean = false): String {
+    // Overloaded formatCompactRupees for backward compatibility
+    fun formatCompactRupees(
+        paise: Long,
+        hideAmounts: Boolean = false
+    ): String = formatCompactRupees(paise, globalCurrencyCode, hideAmounts)
+
+    fun formatCompactRupees(
+        paise: Long,
+        currencyCode: String,
+        hideAmounts: Boolean = false
+    ): String {
         if (hideAmounts) return "••••"
+        val currencyInfo = CurrencyRepository.getCurrency(currencyCode)
+        val symbol = currencyInfo.symbol
         val isNegative = paise < 0
-        val rupees = kotlin.math.abs(paise) / 100.0
-        val prefix = if (isNegative) "-₹" else "₹"
+        val units = kotlin.math.abs(paise) / 100.0
+        val prefix = if (isNegative) "-$symbol" else symbol
         return when {
-            rupees >= 10000000.0 -> String.format(indianLocale, "%s%.1fCr", prefix, rupees / 10000000.0)
-            rupees >= 100000.0 -> String.format(indianLocale, "%s%.1fL", prefix, rupees / 100000.0)
-            rupees >= 1000.0 -> String.format(indianLocale, "%s%.0fK", prefix, rupees / 1000.0)
-            else -> "$prefix${rupees.toLong()}"
+            units >= 10000000.0 -> String.format(standardLocale, "%s%.1fCr", prefix, units / 10000000.0)
+            units >= 100000.0 -> String.format(standardLocale, "%s%.1fL", prefix, units / 100000.0)
+            units >= 1000.0 -> String.format(standardLocale, "%s%.0fK", prefix, units / 1000.0)
+            else -> "$prefix${units.toLong()}"
         }
     }
 
-    /**
-     * Formats numbers according to Indian grouping (e.g., 1,23,456)
-     */
+    private fun isIndianGrouping(code: String): Boolean {
+        val upper = code.uppercase()
+        return upper == "INR" || upper == "NPR" || upper == "PKR" || upper == "BDT" || upper == "LKR"
+    }
+
     private fun formatIndianGrouping(number: Long): String {
         val s = number.toString()
         if (s.length <= 3) return s
@@ -96,11 +138,16 @@ object CurrencyFormatter {
         return sb.reverse().toString() + "," + lastThree
     }
 
-    /**
-     * Parses user input rupee string into paise Long.
-     */
-    fun parseInputToPaise(input: String): Long {
-        val cleaned = input.replace("₹", "").replace(",", "").trim()
+    fun parseInputToPaise(input: String, currencyCode: String = globalCurrencyCode): Long {
+        val currencyInfo = CurrencyRepository.getCurrency(currencyCode)
+        val cleaned = input.replace(currencyInfo.symbol, "")
+            .replace("₹", "")
+            .replace("$", "")
+            .replace("€", "")
+            .replace("£", "")
+            .replace("¥", "")
+            .replace(",", "")
+            .trim()
         if (cleaned.isEmpty()) return 0L
         return try {
             val amountDouble = cleaned.toDouble()

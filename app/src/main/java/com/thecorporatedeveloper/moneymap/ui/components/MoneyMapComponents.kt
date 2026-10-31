@@ -44,38 +44,65 @@ import java.util.Locale
  */
 fun getCategoryIcon(name: String): ImageVector {
     return when (name.lowercase(Locale.ENGLISH)) {
-        "restaurant", "food", "dining" -> Icons.Default.Restaurant
-        "shopping_bag", "shopping" -> Icons.Default.ShoppingBag
+        // Food & Groceries
+        "fish", "set_meal" -> Icons.Default.SetMeal
+        "chicken", "meat", "kebab_dining" -> Icons.Default.KebabDining
+        "vegetables", "veggies", "eco" -> Icons.Default.Eco
+        "fruits", "local_florist" -> Icons.Default.LocalFlorist
+        "grocery_basket", "shopping_basket", "basket" -> Icons.Default.ShoppingBasket
         "shopping_cart", "groceries" -> Icons.Default.ShoppingCart
-        "directions_car", "transport", "cab" -> Icons.Default.DirectionsCar
-        "local_gas_station", "fuel", "petrol" -> Icons.Default.LocalGasStation
-        "build", "vehicle", "service", "vehicle servicing" -> Icons.Default.Build
-        "receipt_long", "receipt", "bills & utilities", "bills", "utilities" -> Icons.Default.ReceiptLong
-        "bolt", "electricity" -> Icons.Default.Bolt
-        "phone_android", "mobile", "internet", "mobile & internet" -> Icons.Default.PhoneAndroid
-        "sports_esports", "entertainment" -> Icons.Default.SportsEsports
-        "local_hospital", "favorite", "health", "medical", "hospital" -> Icons.Default.LocalHospital
-        "school", "education" -> Icons.Default.School
-        "flight", "travel" -> Icons.Default.Flight
-        "roofing", "home", "rent" -> Icons.Default.Home
-        "spa", "personal", "personal care" -> Icons.Default.Spa
-        "card_giftcard", "gifts", "donations" -> Icons.Default.CardGiftcard
-        "family_restroom", "family" -> Icons.Default.FamilyRestroom
-        "devices", "electronics" -> Icons.Default.Devices
-        "trending_up", "investments" -> Icons.Default.TrendingUp
-        "subscriptions" -> Icons.Default.Subscriptions
-        "payments", "salary" -> Icons.Default.Payments
-        "work", "freelance" -> Icons.Default.Work
-        "business" -> Icons.Default.Business
-        "apartment", "rental" -> Icons.Default.Apartment
-        "percent", "grants", "cashback" -> Icons.Default.Percent
-        "savings", "other income" -> Icons.Default.Savings
-        "account_balance", "interest", "bank" -> Icons.Default.AccountBalance
-        "credit_card" -> Icons.Default.CreditCard
-        "account_balance_wallet", "wallet" -> Icons.Default.AccountBalanceWallet
-        "fitness_center", "gym" -> Icons.Default.FitnessCenter
+        "restaurant", "food", "dining" -> Icons.Default.Restaurant
         "local_cafe", "cafe", "coffee" -> Icons.Default.LocalCafe
-        "pets" -> Icons.Default.Pets
+        "cake", "bakery" -> Icons.Default.Cake
+        "fastfood", "fast_food", "burger" -> Icons.Default.Fastfood
+
+        // Shopping & Lifestyle
+        "checkroom", "clothes", "clothing", "tshirt", "t-shirt" -> Icons.Default.Checkroom
+        "shopping_bag", "shopping" -> Icons.Default.ShoppingBag
+        "brush", "cosmetics", "beauty", "makeup" -> Icons.Default.Brush
+        "watch", "jewelry", "accessories" -> Icons.Default.Watch
+        "devices", "electronics", "gadgets" -> Icons.Default.Devices
+        "chair", "furniture", "decor" -> Icons.Default.Chair
+        "card_giftcard", "gift", "gifts", "donations" -> Icons.Default.CardGiftcard
+        "spa", "personal", "personal care" -> Icons.Default.Spa
+
+        // Transport & Utilities
+        "directions_car", "car", "transport", "cab" -> Icons.Default.DirectionsCar
+        "two_wheeler", "motorcycle", "bike", "scooter" -> Icons.Default.TwoWheeler
+        "directions_bus", "bus", "public_transport" -> Icons.Default.DirectionsBus
+        "train", "metro", "subway" -> Icons.Default.Train
+        "local_gas_station", "fuel", "petrol", "diesel" -> Icons.Default.LocalGasStation
+        "bolt", "electricity", "power" -> Icons.Default.Bolt
+        "water_drop", "water", "utility_water" -> Icons.Default.WaterDrop
+        "phone_android", "mobile", "internet", "mobile & internet" -> Icons.Default.PhoneAndroid
+        "wifi", "broadband", "network" -> Icons.Default.Wifi
+        "home", "roofing", "rent", "housing" -> Icons.Default.Home
+        "receipt_long", "receipt", "bills & utilities", "bills", "utilities" -> Icons.Default.ReceiptLong
+        "build", "vehicle", "service", "vehicle servicing", "maintenance" -> Icons.Default.Build
+
+        // Income & Finance
+        "payments", "salary", "paycheck" -> Icons.Default.Payments
+        "account_balance_wallet", "wallet", "cash" -> Icons.Default.AccountBalanceWallet
+        "account_balance", "interest", "bank" -> Icons.Default.AccountBalance
+        "business", "company" -> Icons.Default.Business
+        "work", "freelance", "gig", "consulting" -> Icons.Default.Work
+        "trending_up", "investments", "stocks", "mutual_funds" -> Icons.Default.TrendingUp
+        "percent", "grants", "cashback", "dividends" -> Icons.Default.Percent
+        "redeem", "gift income", "reward" -> Icons.Default.Redeem
+        "savings", "other income", "piggy" -> Icons.Default.Savings
+        "credit_card" -> Icons.Default.CreditCard
+
+        // Health, Leisure & Education
+        "local_hospital", "favorite", "health", "medical", "hospital", "pharmacy" -> Icons.Default.LocalHospital
+        "school", "education", "books", "course" -> Icons.Default.School
+        "flight", "travel", "vacation" -> Icons.Default.Flight
+        "sports_esports", "entertainment", "gaming" -> Icons.Default.SportsEsports
+        "fitness_center", "gym", "workout" -> Icons.Default.FitnessCenter
+        "subscriptions", "ott", "streaming" -> Icons.Default.Subscriptions
+        "pets", "pet_care" -> Icons.Default.Pets
+        "family_restroom", "family" -> Icons.Default.FamilyRestroom
+        "apartment", "rental" -> Icons.Default.Apartment
+
         else -> Icons.Default.MoreHoriz
     }
 }
@@ -194,6 +221,44 @@ fun TransactionItemRow(
             }
         }
     }
+}
+
+
+
+/**
+ * Reusable Confirmation Dialog before deleting a transaction
+ */
+@Composable
+fun DeleteTransactionConfirmationDialog(
+    transaction: TransactionEntity?,
+    onDismiss: () -> Unit,
+    onConfirm: (TransactionEntity) -> Unit
+) {
+    if (transaction == null) return
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete Transaction?", fontWeight = FontWeight.Bold) },
+        text = { Text("Are you sure you want to delete this transaction? This action cannot be undone.") },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onConfirm(transaction)
+                    onDismiss()
+                },
+                modifier = Modifier.testTag("confirm_delete_dialog_button")
+            ) {
+                Text("Delete", color = MoneyMapRed, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.testTag("cancel_delete_dialog_button")
+            ) {
+                Text("Cancel", color = TextSecondary)
+            }
+        }
+    )
 }
 
 /**

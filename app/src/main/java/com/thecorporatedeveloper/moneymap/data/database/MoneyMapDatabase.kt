@@ -90,15 +90,115 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
     }
 }
 
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE budgets ADD COLUMN endDateEpochMillis INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS receipts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                transactionId INTEGER NOT NULL,
+                localFilePath TEXT NOT NULL,
+                thumbnailPath TEXT,
+                originalFileName TEXT NOT NULL DEFAULT '',
+                mimeType TEXT NOT NULL DEFAULT 'image/jpeg',
+                fileSize INTEGER NOT NULL DEFAULT 0,
+                displayOrder INTEGER NOT NULL DEFAULT 0,
+                isPrimary INTEGER NOT NULL DEFAULT 0,
+                createdAt INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY(transactionId) REFERENCES transactions(id) ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_receipts_transactionId ON receipts(transactionId)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_receipts_displayOrder ON receipts(displayOrder)")
+    }
+}
+
+val MIGRATION_10_11 = object : Migration(10, 11) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS bill_reminders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                billName TEXT NOT NULL,
+                expectedAmountPaise INTEGER,
+                categoryId INTEGER NOT NULL,
+                dueDateEpochMillis INTEGER NOT NULL,
+                recurrenceType TEXT NOT NULL DEFAULT 'NONE',
+                customRecurrenceIntervalDays INTEGER NOT NULL DEFAULT 0,
+                reminderOffsetsJson TEXT NOT NULL DEFAULT '[0]',
+                accountId INTEGER,
+                notes TEXT NOT NULL DEFAULT '',
+                isActive INTEGER NOT NULL DEFAULT 1,
+                createdAt INTEGER NOT NULL DEFAULT 0,
+                updatedAt INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY(categoryId) REFERENCES categories(id) ON UPDATE NO ACTION ON DELETE RESTRICT,
+                FOREIGN KEY(accountId) REFERENCES accounts(id) ON UPDATE NO ACTION ON DELETE SET_NULL
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS bill_payments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                billId INTEGER NOT NULL,
+                dueDateForOccurrenceEpochMillis INTEGER NOT NULL,
+                actualAmountPaidPaise INTEGER NOT NULL,
+                paymentDateEpochMillis INTEGER NOT NULL,
+                accountId INTEGER NOT NULL,
+                categoryId INTEGER NOT NULL,
+                linkedTransactionId INTEGER,
+                note TEXT NOT NULL DEFAULT '',
+                createdAt INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY(billId) REFERENCES bill_reminders(id) ON UPDATE NO ACTION ON DELETE CASCADE,
+                FOREIGN KEY(accountId) REFERENCES accounts(id) ON UPDATE NO ACTION ON DELETE RESTRICT,
+                FOREIGN KEY(categoryId) REFERENCES categories(id) ON UPDATE NO ACTION ON DELETE RESTRICT,
+                FOREIGN KEY(linkedTransactionId) REFERENCES transactions(id) ON UPDATE NO ACTION ON DELETE SET_NULL
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_bill_reminders_categoryId ON bill_reminders(categoryId)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_bill_reminders_accountId ON bill_reminders(accountId)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_bill_reminders_dueDateEpochMillis ON bill_reminders(dueDateEpochMillis)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_bill_reminders_isActive ON bill_reminders(isActive)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_bill_payments_billId ON bill_payments(billId)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_bill_payments_accountId ON bill_payments(accountId)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_bill_payments_categoryId ON bill_payments(categoryId)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_bill_payments_linkedTransactionId ON bill_payments(linkedTransactionId)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_bill_payments_dueDateForOccurrenceEpochMillis ON bill_payments(dueDateForOccurrenceEpochMillis)")
+    }
+}
+
+val MIGRATION_11_12 = object : Migration(11, 12) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE bill_reminders ADD COLUMN notificationHour INTEGER NOT NULL DEFAULT -1")
+        db.execSQL("ALTER TABLE bill_reminders ADD COLUMN notificationMinute INTEGER NOT NULL DEFAULT -1")
+    }
+}
+
+val MIGRATION_12_13 = object : Migration(12, 13) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("DROP TABLE IF EXISTS bill_payments")
+        db.execSQL("DROP TABLE IF EXISTS bill_reminders")
+    }
+}
+
 @Database(
     entities = [
         AccountEntity::class,
         CategoryEntity::class,
         TransactionEntity::class,
         BudgetEntity::class,
-        ImportBatchEntity::class
+        ImportBatchEntity::class,
+        ReceiptEntity::class
     ],
-    version = 8,
+    version = 13,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -108,6 +208,7 @@ abstract class MoneyMapDatabase : RoomDatabase() {
     abstract fun transactionDao(): TransactionDao
     abstract fun budgetDao(): BudgetDao
     abstract fun importBatchDao(): ImportBatchDao
+    abstract fun receiptDao(): ReceiptDao
 
     companion object {
         @Volatile
@@ -127,7 +228,12 @@ abstract class MoneyMapDatabase : RoomDatabase() {
                         MIGRATION_4_5,
                         MIGRATION_5_6,
                         MIGRATION_6_7,
-                        MIGRATION_7_8
+                        MIGRATION_7_8,
+                        MIGRATION_8_9,
+                        MIGRATION_9_10,
+                        MIGRATION_10_11,
+                        MIGRATION_11_12,
+                        MIGRATION_12_13
                     )
                     .fallbackToDestructiveMigration()
                     .addCallback(DatabaseCallback(context.applicationContext))
@@ -137,6 +243,7 @@ abstract class MoneyMapDatabase : RoomDatabase() {
             }
         }
     }
+
 
     private class DatabaseCallback(private val context: Context) : RoomDatabase.Callback() {
         override fun onCreate(db: SupportSQLiteDatabase) {
@@ -162,40 +269,5 @@ abstract class MoneyMapDatabase : RoomDatabase() {
  * Clean installs start with zero accounts, zero transactions, and zero budgets.
  */
 suspend fun populateInitialData(db: MoneyMapDatabase) {
-    val categoryDao = db.categoryDao()
-
-    if (categoryDao.getCategoryCount() > 0) return
-
-    // Predefined Expense Categories (18) & Income Categories (7)
-    val defaultCategories = listOf(
-        // Expense Categories
-        CategoryEntity(name = "Food & Dining", type = TransactionType.EXPENSE, iconName = "restaurant", colorHex = "#EF4444", isFavorite = true),
-        CategoryEntity(name = "Groceries", type = TransactionType.EXPENSE, iconName = "shopping_cart", colorHex = "#10B981", isFavorite = true),
-        CategoryEntity(name = "Shopping", type = TransactionType.EXPENSE, iconName = "shopping_bag", colorHex = "#F59E0B", isFavorite = true),
-        CategoryEntity(name = "Transport", type = TransactionType.EXPENSE, iconName = "directions_car", colorHex = "#3B82F6", isFavorite = true),
-        CategoryEntity(name = "Fuel", type = TransactionType.EXPENSE, iconName = "local_gas_station", colorHex = "#F97316", isFavorite = true),
-        CategoryEntity(name = "Vehicle Servicing", type = TransactionType.EXPENSE, iconName = "build", colorHex = "#64748B"),
-        CategoryEntity(name = "Bills & Utilities", type = TransactionType.EXPENSE, iconName = "receipt_long", colorHex = "#EAB308", isFavorite = true),
-        CategoryEntity(name = "Electricity", type = TransactionType.EXPENSE, iconName = "bolt", colorHex = "#FBBF24"),
-        CategoryEntity(name = "Mobile & Internet", type = TransactionType.EXPENSE, iconName = "phone_android", colorHex = "#06B6D4"),
-        CategoryEntity(name = "Rent", type = TransactionType.EXPENSE, iconName = "home", colorHex = "#14B8A6"),
-        CategoryEntity(name = "Education", type = TransactionType.EXPENSE, iconName = "school", colorHex = "#6366F1"),
-        CategoryEntity(name = "Health", type = TransactionType.EXPENSE, iconName = "local_hospital", colorHex = "#EC4899"),
-        CategoryEntity(name = "Entertainment", type = TransactionType.EXPENSE, iconName = "sports_esports", colorHex = "#8B5CF6"),
-        CategoryEntity(name = "Personal Care", type = TransactionType.EXPENSE, iconName = "spa", colorHex = "#F43F5E"),
-        CategoryEntity(name = "Travel", type = TransactionType.EXPENSE, iconName = "flight", colorHex = "#0EA5E9"),
-        CategoryEntity(name = "Home", type = TransactionType.EXPENSE, iconName = "roofing", colorHex = "#10B981"),
-        CategoryEntity(name = "Gifts", type = TransactionType.EXPENSE, iconName = "card_giftcard", colorHex = "#D946EF"),
-        CategoryEntity(name = "Other", type = TransactionType.EXPENSE, iconName = "more_horiz", colorHex = "#94A3B8"),
-
-        // Income Categories
-        CategoryEntity(name = "Salary", type = TransactionType.INCOME, iconName = "payments", colorHex = "#10B981", isFavorite = true),
-        CategoryEntity(name = "Freelance", type = TransactionType.INCOME, iconName = "work", colorHex = "#3B82F6", isFavorite = true),
-        CategoryEntity(name = "Business", type = TransactionType.INCOME, iconName = "business", colorHex = "#6366F1", isFavorite = true),
-        CategoryEntity(name = "Investments", type = TransactionType.INCOME, iconName = "trending_up", colorHex = "#8B5CF6"),
-        CategoryEntity(name = "Interest", type = TransactionType.INCOME, iconName = "account_balance", colorHex = "#06B6D4"),
-        CategoryEntity(name = "Gifts Received", type = TransactionType.INCOME, iconName = "card_giftcard", colorHex = "#EC4899"),
-        CategoryEntity(name = "Other Income", type = TransactionType.INCOME, iconName = "savings", colorHex = "#14B8A6")
-    )
-    categoryDao.insertAll(defaultCategories)
+    // Clean installs start with zero accounts, zero categories, zero transactions, and zero budgets.
 }

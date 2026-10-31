@@ -33,6 +33,7 @@ import com.thecorporatedeveloper.moneymap.data.entity.CategoryEntity
 import com.thecorporatedeveloper.moneymap.data.entity.TransactionEntity
 import com.thecorporatedeveloper.moneymap.domain.FinancialCalculator
 import com.thecorporatedeveloper.moneymap.ui.components.TransactionItemRow
+import com.thecorporatedeveloper.moneymap.ui.components.DeleteTransactionConfirmationDialog
 import com.thecorporatedeveloper.moneymap.ui.components.MoneySproutIllustration
 import com.thecorporatedeveloper.moneymap.ui.components.getCategoryIcon
 import com.thecorporatedeveloper.moneymap.ui.components.parseColorHex
@@ -51,8 +52,8 @@ fun AccountsOverviewScreen(
     onNavigateToAccountDetails: (Long) -> Unit,
     onNavigateToBudgets: () -> Unit
 ) {
-    val netWorthPaise = remember(accounts, transactions) {
-        FinancialCalculator.calculateNetWorth(accounts, transactions)
+    val totalBalancePaise = remember(accounts, transactions) {
+        FinancialCalculator.calculateTotalBalance(accounts, transactions)
     }
 
     val savingsBalancePaise = remember(accounts, transactions) {
@@ -101,10 +102,10 @@ fun AccountsOverviewScreen(
             contentPadding = PaddingValues(top = 8.dp, bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Net Worth & Savings Hero Card
+            // Total Balance & Savings Hero Card (Global balance excluding savings)
             item {
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("accounts_total_balance_card"),
                     shape = RoundedCornerShape(24.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.Transparent)
                 ) {
@@ -125,10 +126,11 @@ fun AccountsOverviewScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "Net Worth",
+                                    text = "Total Balance",
                                     color = Color(0xFF1E3A8A),
                                     style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.testTag("accounts_headline_title")
                                 )
 
                                 if (accounts.isNotEmpty()) {
@@ -159,10 +161,11 @@ fun AccountsOverviewScreen(
                             Spacer(modifier = Modifier.height(10.dp))
 
                             Text(
-                                text = CurrencyFormatter.formatRupees(netWorthPaise, hideAmounts = hideAmounts),
+                                text = CurrencyFormatter.formatRupees(totalBalancePaise, hideAmounts = hideAmounts),
                                 color = Color(0xFF0F172A),
                                 style = MaterialTheme.typography.displayLarge,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.testTag("accounts_headline_balance")
                             )
 
                             Spacer(modifier = Modifier.height(14.dp))
@@ -354,28 +357,19 @@ fun AccountsOverviewScreen(
                                 )
                                 if (acc.isSavingsAccount) {
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = Color(0x3310B981)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0x2210B981)),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Savings,
-                                                contentDescription = null,
-                                                tint = Color(0xFF047857),
-                                                modifier = Modifier.size(12.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(3.dp))
-                                            Text(
-                                                text = "Savings",
-                                                color = Color(0xFF047857),
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
+                                        Icon(
+                                            Icons.Default.Savings,
+                                            contentDescription = "Savings Account",
+                                            tint = Color(0xFF047857),
+                                            modifier = Modifier.size(13.dp)
+                                        )
                                     }
                                 }
                             }
@@ -454,8 +448,11 @@ fun AccountDetailsScreen(
     onNavigateToAddMoney: () -> Unit,
     onNavigateToTransfer: () -> Unit,
     onNavigateToStatement: () -> Unit = {},
-    onNavigateToTransactionDetails: (Long) -> Unit
+    onNavigateToTransactionDetails: (Long) -> Unit,
+    onNavigateToEditTransaction: ((Long) -> Unit)? = null,
+    onDeleteTransaction: ((TransactionEntity) -> Unit)? = null
 ) {
+    var transactionToDelete by remember { mutableStateOf<TransactionEntity?>(null) }
     val categoryMap = remember(categories) { categories.associateBy { it.id } }
     val balancePaise = remember(account, transactions) {
         FinancialCalculator.calculateAccountBalance(account, transactions)
@@ -600,6 +597,14 @@ fun AccountDetailsScreen(
                 }
             }
         }
+    }
+
+    if (transactionToDelete != null && onDeleteTransaction != null) {
+        DeleteTransactionConfirmationDialog(
+            transaction = transactionToDelete,
+            onDismiss = { transactionToDelete = null },
+            onConfirm = { tx -> onDeleteTransaction(tx) }
+        )
     }
 }
 

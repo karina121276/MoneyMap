@@ -101,6 +101,7 @@ data class BudgetEntity(
     val accountId: Long? = null,
     val categoryId: Long? = null,
     val startDateEpochMillis: Long = System.currentTimeMillis(),
+    val endDateEpochMillis: Long = 0L,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val totalLimitPaise: Long = 0L,
@@ -120,4 +121,32 @@ data class ImportBatchEntity(
     val importedItems: Int,
     val skippedDuplicates: Int,
     val failedItems: Int
+)
+
+@Entity(
+    tableName = "receipts",
+    foreignKeys = [
+        ForeignKey(
+            entity = TransactionEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["transactionId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [
+        Index("transactionId"),
+        Index("displayOrder")
+    ]
+)
+data class ReceiptEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val transactionId: Long,
+    val localFilePath: String,
+    val thumbnailPath: String? = null,
+    val originalFileName: String = "",
+    val mimeType: String = "image/jpeg",
+    val fileSize: Long = 0L,
+    val displayOrder: Int = 0,
+    val isPrimary: Boolean = false,
+    val createdAt: Long = System.currentTimeMillis()
 )

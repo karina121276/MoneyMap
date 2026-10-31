@@ -33,6 +33,9 @@ import com.thecorporatedeveloper.moneymap.data.entity.TransactionEntity
 import com.thecorporatedeveloper.moneymap.domain.FinancialCalculator
 import com.thecorporatedeveloper.moneymap.ui.components.*
 import com.thecorporatedeveloper.moneymap.ui.theme.*
+import androidx.compose.foundation.BorderStroke
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
@@ -47,20 +50,21 @@ fun ReportsScreen(
     hideAmounts: Boolean,
     firstDayOfWeek: String = "Monday",
     onNavigateToCategoryBreakdown: () -> Unit,
-    onNavigateToCalendar: () -> Unit
+    onNavigateToCalendar: () -> Unit,
+    onNavigateToCategoryTransactions: (categoryId: Long, startEpoch: Long, endEpoch: Long, periodLabel: String) -> Unit = { _, _, _, _ -> }
 ) {
     var selectedPeriodTab by remember { mutableStateOf("Month") }
 
     val categoryMap = remember(categories) { categories.associateBy { it.id } }
 
-    val filteredTransactions = remember(transactions, selectedPeriodTab, firstDayOfWeek) {
+    val (reportStartEpoch, reportEndEpoch, reportPeriodLabel) = remember(selectedPeriodTab, firstDayOfWeek) {
         val now = LocalDate.now()
         val zone = ZoneId.systemDefault()
         when (selectedPeriodTab) {
             "Day" -> {
                 val start = now.atStartOfDay(zone).toInstant().toEpochMilli()
                 val end = now.atTime(23, 59, 59).atZone(zone).toInstant().toEpochMilli()
-                transactions.filter { it.dateEpochMillis in start..end }
+                Triple(start, end, "Today")
             }
             "Week" -> {
                 val dayOfWeekTarget = when (firstDayOfWeek.uppercase()) {
@@ -71,21 +75,25 @@ fun ReportsScreen(
                 val startOfWeek = now.with(java.time.temporal.TemporalAdjusters.previousOrSame(dayOfWeekTarget))
                 val start = startOfWeek.atStartOfDay(zone).toInstant().toEpochMilli()
                 val end = startOfWeek.plusDays(6).atTime(23, 59, 59).atZone(zone).toInstant().toEpochMilli()
-                transactions.filter { it.dateEpochMillis in start..end }
+                Triple(start, end, "This Week")
             }
             "Month" -> {
                 val ym = YearMonth.now()
                 val start = ym.atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
                 val end = ym.atEndOfMonth().atTime(23, 59, 59).atZone(zone).toInstant().toEpochMilli()
-                transactions.filter { it.dateEpochMillis in start..end }
+                Triple(start, end, ym.format(DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH)))
             }
             "Year" -> {
                 val start = now.withDayOfYear(1).atStartOfDay(zone).toInstant().toEpochMilli()
                 val end = now.withDayOfYear(now.lengthOfYear()).atTime(23, 59, 59).atZone(zone).toInstant().toEpochMilli()
-                transactions.filter { it.dateEpochMillis in start..end }
+                Triple(start, end, "${now.year}")
             }
-            else -> transactions
+            else -> Triple(0L, Long.MAX_VALUE, "All Time")
         }
+    }
+
+    val filteredTransactions = remember(transactions, reportStartEpoch, reportEndEpoch) {
+        transactions.filter { it.dateEpochMillis in reportStartEpoch..reportEndEpoch }
     }
 
     val periodSummary = remember(filteredTransactions) {
@@ -308,25 +316,66 @@ fun ReportsScreen(
                 items(categoryBreakdown.take(4)) { cat ->
                     val col = parseColorHex(cat.colorHex, MoneyMapBlue)
                     Surface(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable {
+                                cat.categoryId?.let { catId ->
+                                    onNavigateToCategoryTransactions(catId, reportStartEpoch, reportEndEpoch, reportPeriodLabel)
+                                }
+                            }
+                            .testTag("top_category_item_${cat.categoryId}"),
                         shape = RoundedCornerShape(14.dp),
-                        color = MaterialTheme.colorScheme.surface
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, BorderSubtle.copy(alpha = 0.5f))
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(cat.categoryName, fontWeight = FontWeight.SemiBold)
-                                Text(CurrencyFormatter.formatRupees(cat.totalSpentPaise, hideAmounts = hideAmounts), fontWeight = FontWeight.Bold)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clip(CircleShape)
+                                            .background(col.copy(alpha = 0.15f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = getCategoryIcon(cat.iconName),
+                                            contentDescription = null,
+                                            tint = col,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text(cat.categoryName, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                }
+
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        CurrencyFormatter.formatRupees(cat.totalSpentPaise, hideAmounts = hideAmounts),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.ChevronRight,
+                                        contentDescription = "View category transactions",
+                                        tint = TextSecondary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             }
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
                             LinearProgressIndicator(
                                 progress = { (cat.percentage / 100f).toFloat().coerceIn(0f, 1f) },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(8.dp)
-                                    .clip(RoundedCornerShape(4.dp)),
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp)),
                                 color = col,
                                 trackColor = BorderSubtle
                             )
@@ -669,36 +718,18 @@ fun BudgetsScreen(
                 }
             } else {
                 items(budgets, key = { it.id }) { b ->
-                    val limitPaise = b.effectiveLimitPaise
-
-                    // Calculate accurate spent for budget 'b'
-                    val ym = remember(b.monthYear) {
-                        try { YearMonth.parse(b.monthYear) } catch (e: Exception) { YearMonth.now() }
-                    }
-                    val zone = ZoneId.systemDefault()
-                    val start = ym.atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
-                    val end = ym.atEndOfMonth().atTime(23, 59, 59).atZone(zone).toInstant().toEpochMilli()
-
-                    val eligibleSpentPaise = remember(transactions, b, start, end) {
-                        transactions.filter { tx ->
-                            tx.type == TransactionType.EXPENSE &&
-                                    tx.dateEpochMillis in start..end &&
-                                    tx.dateEpochMillis >= (if (b.startDateEpochMillis > 0L) b.startDateEpochMillis else start) &&
-                                    when (b.scope) {
-                                        "ACCOUNT" -> tx.accountId == b.accountId
-                                        "CATEGORY" -> tx.categoryId == b.categoryId
-                                        "ACCOUNT_CATEGORY" -> tx.accountId == b.accountId && tx.categoryId == b.categoryId
-                                        else -> true // "ALL_ACCOUNTS"
-                                    }
-                        }.sumOf { it.amountPaise }
+                    val spendingResult = remember(transactions, b) {
+                        FinancialCalculator.calculateBudgetSpending(b, transactions)
                     }
 
-                    val remainingPaise = limitPaise - eligibleSpentPaise
-                    val usageFraction = if (limitPaise > 0L) (eligibleSpentPaise.toDouble() / limitPaise.toDouble()).toFloat().coerceAtLeast(0f) else 0f
-                    val usagePct = (usageFraction * 100).toInt()
-
-                    val isOverBudget = eligibleSpentPaise > limitPaise
-                    val isApproaching = usageFraction >= 0.8f && !isOverBudget
+                    val limitPaise = spendingResult.limitPaise
+                    val eligibleSpentPaise = spendingResult.spentPaise
+                    val remainingPaise = spendingResult.remainingPaise
+                    val usageFraction = spendingResult.usageFraction
+                    val usagePct = spendingResult.usagePercentage
+                    val isOverBudget = spendingResult.isOverBudget
+                    val isApproaching = spendingResult.isApproaching
+                    val status = spendingResult.status // "UPCOMING", "ACTIVE", "COMPLETED"
 
                     val progressColor = when {
                         isOverBudget -> MoneyMapRed
@@ -713,11 +744,10 @@ fun BudgetsScreen(
                         else -> "All Accounts"
                     }
 
-                    val monthTitle = try {
-                        val fmt = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)
-                        ym.format(fmt)
-                    } catch (e: Exception) {
-                        b.monthYear
+                    val (statusBg, statusFg) = when (status) {
+                        "ACTIVE" -> Color(0xFFDCFCE7) to Color(0xFF16A34A)
+                        "UPCOMING" -> Color(0xFFFEF3C7) to Color(0xFFD97706)
+                        else -> Color(0xFFF1F5F9) to Color(0xFF64748B)
                     }
 
                     Card(
@@ -728,7 +758,7 @@ fun BudgetsScreen(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                     ) {
                         Column(modifier = Modifier.padding(18.dp)) {
-                            // Header: Name + Scope Badge
+                            // Header: Name + Status Badge & Scope Badge
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -743,38 +773,58 @@ fun BudgetsScreen(
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = monthTitle,
+                                        text = spendingResult.dateRangeLabel,
                                         fontSize = 12.sp,
                                         color = TextSecondary
                                     )
                                 }
 
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = MoneyMapBlue.copy(alpha = 0.12f)
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically
+                                    // Status Badge
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = statusBg
                                     ) {
-                                        Icon(
-                                            imageVector = when (b.scope) {
-                                                "ACCOUNT" -> Icons.Default.AccountBalance
-                                                "CATEGORY" -> Icons.Default.Category
-                                                "ACCOUNT_CATEGORY" -> Icons.Default.Layers
-                                                else -> Icons.Default.Public
-                                            },
-                                            contentDescription = null,
-                                            tint = MoneyMapBlue,
-                                            modifier = Modifier.size(13.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
                                         Text(
-                                            text = scopeLabel,
+                                            text = status.lowercase().replaceFirstChar { it.uppercase() },
+                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
                                             fontSize = 11.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = MoneyMapBlue
+                                            fontWeight = FontWeight.Bold,
+                                            color = statusFg
                                         )
+                                    }
+
+                                    // Scope Badge
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MoneyMapBlue.copy(alpha = 0.12f)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = when (b.scope) {
+                                                    "ACCOUNT" -> Icons.Default.AccountBalance
+                                                    "CATEGORY" -> Icons.Default.Category
+                                                    "ACCOUNT_CATEGORY" -> Icons.Default.Layers
+                                                    else -> Icons.Default.Public
+                                                },
+                                                contentDescription = null,
+                                                tint = MoneyMapBlue,
+                                                modifier = Modifier.size(13.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = scopeLabel,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MoneyMapBlue
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -936,16 +986,40 @@ fun BudgetFormDialog(
     var selectedAccountId by remember { mutableStateOf(initialBudget?.accountId ?: accounts.firstOrNull()?.id) }
     var selectedCategoryId by remember { mutableStateOf(initialBudget?.categoryId ?: categories.firstOrNull()?.id) }
     var selectedMonthYear by remember { mutableStateOf(initialBudget?.monthYear ?: YearMonth.now().toString()) }
-    var startDateEpochMillis by remember { mutableStateOf(initialBudget?.startDateEpochMillis ?: System.currentTimeMillis()) }
+    var startDateEpochMillis by remember {
+        mutableStateOf(
+            if (initialBudget != null && initialBudget.startDateEpochMillis > 0L) {
+                initialBudget.startDateEpochMillis
+            } else {
+                val ym = try { YearMonth.parse(initialBudget?.monthYear ?: YearMonth.now().toString()) } catch (e: Exception) { YearMonth.now() }
+                ym.atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            }
+        )
+    }
+    var endDateEpochMillis by remember {
+        mutableStateOf(
+            if (initialBudget != null && initialBudget.endDateEpochMillis > 0L) {
+                initialBudget.endDateEpochMillis
+            } else {
+                val ym = try { YearMonth.parse(initialBudget?.monthYear ?: YearMonth.now().toString()) } catch (e: Exception) { YearMonth.now() }
+                ym.atEndOfMonth().atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            }
+        )
+    }
 
     var accountExpanded by remember { mutableStateOf(false) }
     var categoryExpanded by remember { mutableStateOf(false) }
     var showStartDatePicker by remember { mutableStateOf(false) }
+    var showEndDatePicker by remember { mutableStateOf(false) }
 
     val dateFormatter = remember { DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH) }
     val startDateString = remember(startDateEpochMillis) {
         Instant.ofEpochMilli(startDateEpochMillis).atZone(ZoneId.systemDefault()).toLocalDate().format(dateFormatter)
     }
+    val endDateString = remember(endDateEpochMillis) {
+        Instant.ofEpochMilli(endDateEpochMillis).atZone(ZoneId.systemDefault()).toLocalDate().format(dateFormatter)
+    }
+    val isDateRangeValid = endDateEpochMillis >= startDateEpochMillis
 
     AlertDialog(
         containerColor = MaterialTheme.colorScheme.surface,
@@ -963,7 +1037,7 @@ fun BudgetFormDialog(
                     value = nameInput,
                     onValueChange = { nameInput = it },
                     label = { Text("Budget Name") },
-                    placeholder = { Text("e.g. HDFC Monthly Limit") },
+                    placeholder = { Text("e.g. Monthly Limit") },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
@@ -975,7 +1049,7 @@ fun BudgetFormDialog(
                 OutlinedTextField(
                     value = limitInput,
                     onValueChange = { limitInput = it.filter { ch -> ch.isDigit() } },
-                    label = { Text("Monthly Spending Limit (₹)") },
+                    label = { Text("Spending Limit (₹)") },
                     placeholder = { Text("e.g. 20000") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
@@ -985,28 +1059,65 @@ fun BudgetFormDialog(
                         .testTag("budget_limit_input")
                 )
 
-                // Budget Start Date Field
-                OutlinedCard(
-                    onClick = { showStartDatePicker = true },
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("budget_start_date_card")
+                // Budget Dates: Start & End Date Cards
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(
+                    OutlinedCard(
+                        onClick = { showStartDatePicker = true },
+                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .weight(1f)
+                            .testTag("budget_start_date_card")
                     ) {
-                        Column {
-                            Text("Budget Start Date", fontSize = 11.sp, color = TextSecondary)
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(startDateString, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Start Date", fontSize = 11.sp, color = TextSecondary)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(startDateString, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
+                            }
+                            Icon(Icons.Default.CalendarMonth, contentDescription = "Select Start Date", tint = MoneyMapBlue, modifier = Modifier.size(18.dp))
                         }
-                        Icon(Icons.Default.CalendarMonth, contentDescription = "Select Start Date", tint = MoneyMapBlue)
                     }
+
+                    OutlinedCard(
+                        onClick = { showEndDatePicker = true },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("budget_end_date_card")
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("End Date", fontSize = 11.sp, color = TextSecondary)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(endDateString, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
+                            }
+                            Icon(Icons.Default.CalendarMonth, contentDescription = "Select End Date", tint = MoneyMapBlue, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                }
+
+                if (!isDateRangeValid) {
+                    Text(
+                        text = "End date must be on or after start date",
+                        color = MoneyMapRed,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
                 }
 
                 // Scope Selector Chips with FlowRow for wrapping
@@ -1099,27 +1210,30 @@ fun BudgetFormDialog(
             }
         },
         confirmButton = {
+            val parsedLimit = CurrencyFormatter.parseInputToPaise(limitInput)
+            val canSave = parsedLimit > 0L && isDateRangeValid
             Button(
                 onClick = {
-                    val limitPaise = CurrencyFormatter.parseInputToPaise(limitInput)
-                    if (limitPaise > 0L) {
+                    if (canSave) {
                         val budget = BudgetEntity(
                             id = initialBudget?.id ?: 0L,
                             name = nameInput.ifBlank { "Monthly Budget" },
                             monthYear = selectedMonthYear,
                             period = "MONTHLY",
-                            amountLimitPaise = limitPaise,
+                            amountLimitPaise = parsedLimit,
                             scope = selectedScope,
                             accountId = if (selectedScope == "ACCOUNT" || selectedScope == "ACCOUNT_CATEGORY") selectedAccountId else null,
                             categoryId = if (selectedScope == "CATEGORY" || selectedScope == "ACCOUNT_CATEGORY") selectedCategoryId else null,
                             startDateEpochMillis = startDateEpochMillis,
+                            endDateEpochMillis = endDateEpochMillis,
                             createdAt = initialBudget?.createdAt ?: System.currentTimeMillis(),
                             updatedAt = System.currentTimeMillis(),
-                            totalLimitPaise = limitPaise
+                            totalLimitPaise = parsedLimit
                         )
                         onConfirm(budget)
                     }
                 },
+                enabled = canSave,
                 colors = ButtonDefaults.buttonColors(containerColor = MoneyMapNavy),
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier.testTag("save_budget_dialog_button")
@@ -1158,5 +1272,445 @@ fun BudgetFormDialog(
         ) {
             DatePicker(state = datePickerState)
         }
+    }
+
+    if (showEndDatePicker) {
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = endDateEpochMillis)
+        DatePickerDialog(
+            onDismissRequest = { showEndDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            endDateEpochMillis = millis
+                        }
+                        showEndDatePicker = false
+                    }
+                ) {
+                    Text("OK")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEndDatePicker = false }) {
+                    Text("Cancel")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+}
+
+/**
+ * Filtered Category Transactions List Screen shown when tapping a category card in Reports (Top Spending Categories).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CategoryTransactionsScreen(
+    categoryId: Long,
+    categoryName: String,
+    periodLabel: String,
+    startEpochMillis: Long,
+    endEpochMillis: Long,
+    transactions: List<TransactionEntity>,
+    categories: List<CategoryEntity>,
+    accounts: List<AccountEntity>,
+    budgets: List<BudgetEntity> = emptyList(),
+    hideAmounts: Boolean,
+    onBack: () -> Unit,
+    onNavigateToDetails: (Long) -> Unit,
+    onNavigateToEditTransaction: ((Long) -> Unit)? = null,
+    onDeleteTransaction: ((TransactionEntity) -> Unit)? = null
+) {
+    var isNewestFirst by remember { mutableStateOf(true) }
+    var showSortMenu by remember { mutableStateOf(false) }
+    var transactionToDelete by remember { mutableStateOf<TransactionEntity?>(null) }
+
+    val category = remember(categories, categoryId) { categories.find { it.id == categoryId } }
+    val catColor = category?.let { parseColorHex(it.colorHex, MoneyMapBlue) } ?: MoneyMapNavy
+    val catIcon = category?.iconName?.let { getCategoryIcon(it) } ?: Icons.Default.Category
+    val accountMap = remember(accounts) { accounts.associateBy { it.id } }
+
+    val filteredTransactions = remember(transactions, categoryId, startEpochMillis, endEpochMillis) {
+        transactions.filter { tx ->
+            tx.categoryId == categoryId &&
+            tx.type == TransactionType.EXPENSE &&
+            tx.dateEpochMillis in startEpochMillis..endEpochMillis
+        }
+    }
+
+    val sortedTransactions = remember(filteredTransactions, isNewestFirst) {
+        if (isNewestFirst) {
+            filteredTransactions.sortedByDescending { it.dateEpochMillis }
+        } else {
+            filteredTransactions.sortedBy { it.dateEpochMillis }
+        }
+    }
+
+    val totalSpentPaise = remember(filteredTransactions) {
+        filteredTransactions.sumOf { it.amountPaise }
+    }
+
+    val averageSpendPaise = remember(filteredTransactions, totalSpentPaise) {
+        if (filteredTransactions.isNotEmpty()) totalSpentPaise / filteredTransactions.size else 0L
+    }
+
+    // Check budget for this category
+    val matchingBudget = remember(budgets, categoryId) {
+        budgets.find { b ->
+            (b.scope == "CATEGORY" || b.scope == "ACCOUNT_CATEGORY") && b.categoryId == categoryId
+        }
+    }
+
+    val budgetLimitPaise = matchingBudget?.amountLimitPaise ?: 0L
+    val usagePercentage = if (budgetLimitPaise > 0) {
+        ((totalSpentPaise.toDouble() / budgetLimitPaise.toDouble()) * 100).toInt().coerceIn(0, 100)
+    } else {
+        0
+    }
+
+    // Date grouping
+    val groupedTransactions = remember(sortedTransactions) {
+        val fmt = SimpleDateFormat("dd MMM yyyy", Locale.ENGLISH)
+        sortedTransactions.groupBy { fmt.format(Date(it.dateEpochMillis)) }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "$categoryName Transactions",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack, modifier = Modifier.testTag("category_tx_back_btn")) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MoneyMapBlue.copy(alpha = 0.12f),
+                        modifier = Modifier.padding(end = 12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.CalendarMonth,
+                                contentDescription = null,
+                                tint = MoneyMapBlue,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = periodLabel,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MoneyMapBlue
+                            )
+                        }
+                    }
+                }
+            )
+        }
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 40.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            // Hero Category Summary Card
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = catColor.copy(alpha = 0.08f)),
+                    border = BorderStroke(1.dp, catColor.copy(alpha = 0.2f))
+                ) {
+                    Column(modifier = Modifier.padding(18.dp)) {
+                        // Top row: Icon, Category name, Expenses tag
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .clip(CircleShape)
+                                        .background(catColor.copy(alpha = 0.18f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = catIcon,
+                                        contentDescription = null,
+                                        tint = catColor,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = categoryName,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 18.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "Expense Category",
+                                        fontSize = 12.sp,
+                                        color = TextSecondary
+                                    )
+                                }
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MoneyMapRed.copy(alpha = 0.12f)
+                            ) {
+                                Text(
+                                    text = "↓ Expenses",
+                                    color = MoneyMapRed,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // 3 Metrics Row: Total Spent | Transactions | Average Spend
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Total Spent", fontSize = 11.sp, color = TextSecondary)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = CurrencyFormatter.formatRupees(totalSpentPaise, hideAmounts = hideAmounts),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = MoneyMapRed
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Transactions", fontSize = 11.sp, color = TextSecondary)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "${filteredTransactions.size}",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Average Spend", fontSize = 11.sp, color = TextSecondary)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = CurrencyFormatter.formatRupees(averageSpendPaise, hideAmounts = hideAmounts),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Progress Bar & Usage Label
+                        val progressFraction = if (budgetLimitPaise > 0) {
+                            (totalSpentPaise.toFloat() / budgetLimitPaise.toFloat()).coerceIn(0f, 1f)
+                        } else {
+                            1f
+                        }
+                        LinearProgressIndicator(
+                            progress = { progressFraction },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                            color = if (usagePercentage > 90) MoneyMapRed else catColor,
+                            trackColor = BorderSubtle
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = if (budgetLimitPaise > 0) "$usagePercentage% used" else "Period Total",
+                                fontSize = 11.sp,
+                                color = TextSecondary
+                            )
+                            Text(
+                                text = if (budgetLimitPaise > 0) {
+                                    "${CurrencyFormatter.formatRupees(totalSpentPaise, hideAmounts = hideAmounts)} / ${CurrencyFormatter.formatRupees(budgetLimitPaise, hideAmounts = hideAmounts)}"
+                                } else {
+                                    CurrencyFormatter.formatRupees(totalSpentPaise, hideAmounts = hideAmounts)
+                                },
+                                fontSize = 11.sp,
+                                color = TextSecondary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Transactions Header Row with Count & Sort Toggle
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Transactions (${filteredTransactions.size})",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
+
+                    Box {
+                        TextButton(
+                            onClick = { showSortMenu = true },
+                            modifier = Modifier.testTag("category_tx_sort_button")
+                        ) {
+                            Icon(
+                                Icons.Default.SwapVert,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = MoneyMapBlue
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (isNewestFirst) "Newest First" else "Oldest First",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MoneyMapBlue
+                            )
+                        }
+
+                        DropdownMenu(
+                            expanded = showSortMenu,
+                            onDismissRequest = { showSortMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Newest First") },
+                                leadingIcon = { Icon(Icons.Default.ArrowDownward, contentDescription = null) },
+                                onClick = {
+                                    isNewestFirst = true
+                                    showSortMenu = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Oldest First") },
+                                leadingIcon = { Icon(Icons.Default.ArrowUpward, contentDescription = null) },
+                                onClick = {
+                                    isNewestFirst = false
+                                    showSortMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Grouped Transaction List
+            if (sortedTransactions.isEmpty()) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                Icons.Default.ReceiptLong,
+                                contentDescription = null,
+                                tint = TextSecondary,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "No Transactions Found",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "No $categoryName expense transactions recorded for $periodLabel.",
+                                fontSize = 12.sp,
+                                color = TextSecondary,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        }
+                    }
+                }
+            } else {
+                groupedTransactions.forEach { (dateStr, txList) ->
+                    val daySumPaise = txList.sumOf { it.amountPaise }
+                    item(key = "header_$dateStr") {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp, bottom = 2.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = dateStr,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = CurrencyFormatter.formatRupees(daySumPaise, hideAmounts = hideAmounts),
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 12.sp,
+                                color = TextSecondary
+                            )
+                        }
+                    }
+
+                    txList.forEach { tx ->
+                        item(key = "tx_${tx.id}") {
+                            val acc = accountMap[tx.accountId]
+                            TransactionItemRow(
+                                transaction = tx,
+                                category = category,
+                                accountName = acc?.name ?: "",
+                                hideAmounts = hideAmounts,
+                                onClick = { onNavigateToDetails(tx.id) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (transactionToDelete != null && onDeleteTransaction != null) {
+        DeleteTransactionConfirmationDialog(
+            transaction = transactionToDelete,
+            onDismiss = { transactionToDelete = null },
+            onConfirm = { tx -> onDeleteTransaction(tx) }
+        )
     }
 }

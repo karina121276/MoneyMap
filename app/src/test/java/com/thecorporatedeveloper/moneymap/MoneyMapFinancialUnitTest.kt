@@ -199,4 +199,24 @@ class MoneyMapFinancialUnitTest {
         assertEquals(1, restoredTxs.size)
         assertEquals(150000L, restoredTxs[0].amountPaise)
     }
+
+    @Test
+    fun testSavingsBalanceSeparationFromTotalAssetBalance() {
+        // Regular Checking / Bank account: ₹50,000
+        val regularBank = AccountEntity(id = 1, name = "HDFC Current", type = AccountType.BANK, openingBalancePaise = 5000000L)
+        // Savings Account: ₹1,00,000
+        val savingsAccount = AccountEntity(id = 2, name = "SBI Emergency Fund", type = AccountType.SAVINGS, openingBalancePaise = 10000000L)
+        // Cash account: ₹10,000
+        val cashWallet = AccountEntity(id = 3, name = "Cash", type = AccountType.CASH, openingBalancePaise = 1000000L)
+
+        val accounts = listOf(regularBank, savingsAccount, cashWallet)
+
+        // Total Assets must exclude savings account
+        val totalAssets = FinancialCalculator.calculateTotalAssetBalance(accounts, emptyList())
+        assertEquals(6000000L, totalAssets) // 50,000 + 10,000 = ₹60,000
+
+        // Total Savings must include only savings account
+        val totalSavings = FinancialCalculator.calculateSavingsBalance(accounts, emptyList())
+        assertEquals(10000000L, totalSavings) // ₹1,00,000
+    }
 }

@@ -30,6 +30,7 @@ import com.thecorporatedeveloper.moneymap.ui.components.CircularProgressRing
 import com.thecorporatedeveloper.moneymap.ui.components.MetricSummaryCard
 import com.thecorporatedeveloper.moneymap.data.entity.BudgetEntity
 import com.thecorporatedeveloper.moneymap.ui.components.TransactionItemRow
+import com.thecorporatedeveloper.moneymap.ui.components.DeleteTransactionConfirmationDialog
 import com.thecorporatedeveloper.moneymap.ui.components.MoneySproutIllustration
 import com.thecorporatedeveloper.moneymap.ui.theme.*
 import java.time.YearMonth
@@ -52,13 +53,18 @@ fun DashboardScreen(
     onNavigateToTransactionDetails: (Long) -> Unit,
     onNavigateToBudgets: () -> Unit,
     onNavigateToSmartEntry: () -> Unit,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    onNavigateToEditTransaction: ((Long) -> Unit)? = null,
+    onDeleteTransaction: ((TransactionEntity) -> Unit)? = null
 ) {
+
+    var transactionToDelete by remember { mutableStateOf<TransactionEntity?>(null) }
+
     val categoryMap = remember(categories) { categories.associateBy { it.id } }
     val accountMap = remember(accounts) { accounts.associateBy { it.id } }
 
     val totalBalancePaise = remember(accounts, transactions) {
-        FinancialCalculator.calculateTotalAssetBalance(accounts, transactions)
+        FinancialCalculator.calculateTotalBalance(accounts, transactions)
     }
 
     val periodSummary = remember(transactions) {
@@ -73,30 +79,34 @@ fun DashboardScreen(
         transactions.take(5)
     }
 
-    val currentMonthBudget = remember(budgets) {
-        val currentMonthKey = YearMonth.now().toString()
-        budgets.find { it.monthYear == currentMonthKey }
-    }
+    data class DashboardBudgetCardData(
+        val budget: BudgetEntity,
+        val result: com.thecorporatedeveloper.moneymap.domain.BudgetSpendingResult,
+        val scopeLabel: String
+    )
 
-    val currentMonthBudgetSpent = remember(transactions, currentMonthBudget) {
-        if (currentMonthBudget == null) 0L
-        else {
-            val ym = try { YearMonth.parse(currentMonthBudget.monthYear) } catch (e: Exception) { YearMonth.now() }
-            val zone = ZoneId.systemDefault()
-            val start = ym.atDay(1).atStartOfDay(zone).toInstant().toEpochMilli()
-            val end = ym.atEndOfMonth().atTime(23, 59, 59).atZone(zone).toInstant().toEpochMilli()
-            transactions.filter { tx ->
-                tx.type == TransactionType.EXPENSE &&
-                        tx.dateEpochMillis in start..end &&
-                        tx.dateEpochMillis >= (if (currentMonthBudget.startDateEpochMillis > 0L) currentMonthBudget.startDateEpochMillis else start) &&
-                        when (currentMonthBudget.scope) {
-                            "ACCOUNT" -> tx.accountId == currentMonthBudget.accountId
-                            "CATEGORY" -> tx.categoryId == currentMonthBudget.categoryId
-                            "ACCOUNT_CATEGORY" -> tx.accountId == currentMonthBudget.accountId && tx.categoryId == currentMonthBudget.categoryId
-                            else -> true
-                        }
-            }.sumOf { it.amountPaise }
-        }
+    val activeBudgetsWithResults = remember(budgets, transactions, accounts, categories) {
+        val accMap = accounts.associateBy { it.id }
+        val catMap = categories.associateBy { it.id }
+
+        budgets.map { b ->
+            val res = FinancialCalculator.calculateBudgetSpending(b, transactions)
+            val scopeLabel = when (b.scope) {
+                "ACCOUNT" -> accMap[b.accountId]?.name ?: "Bank Account"
+                "CATEGORY" -> catMap[b.categoryId]?.name ?: "Category"
+                "ACCOUNT_CATEGORY" -> "${accMap[b.accountId]?.name ?: "Account"} • ${catMap[b.categoryId]?.name ?: "Category"}"
+                else -> "All Accounts"
+            }
+            DashboardBudgetCardData(b, res, scopeLabel)
+        }.sortedWith(
+            compareBy<DashboardBudgetCardData> {
+                when (it.result.status) {
+                    "ACTIVE" -> 0
+                    "UPCOMING" -> 1
+                    else -> 2
+                }
+            }.thenBy { it.budget.name }
+        )
     }
 
     Scaffold { innerPadding ->
@@ -405,84 +415,212 @@ fun DashboardScreen(
                 }
             }
 
-            // 4. Spending Goal Progress Card (real budget calculation)
+
+
+            // 4. My Budgets Section (All Active Budgets Carousel)
             item {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(20.dp))
-                        .clickable(onClick = onNavigateToBudgets),
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 2.dp,
-                    shape = RoundedCornerShape(20.dp)
-                ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (currentMonthBudget != null && currentMonthBudget.effectiveLimitPaise > 0L) {
-                            val ratio = (currentMonthBudgetSpent.toFloat() / currentMonthBudget.effectiveLimitPaise).coerceIn(0f, 1f)
-                            val pct = (ratio * 100).toInt()
-                            val progressCol = if (ratio > 0.9f) MoneyMapRed else if (ratio > 0.75f) MoneyMapOrange else MoneyMapGreen
+                        Text(
+                            text = "My Budgets",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MoneyMapNavy
+                        )
+                        TextButton(
+                            onClick = onNavigateToBudgets,
+                            modifier = Modifier.testTag("see_all_budgets_button")
+                        ) {
+                            Text("See All", color = MoneyMapBlue, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
 
-                            CircularProgressRing(
-                                percentage = ratio,
-                                modifier = Modifier.size(54.dp),
-                                progressColor = progressCol,
-                                strokeWidth = 6.dp
-                            )
+                    Spacer(modifier = Modifier.height(4.dp))
 
-                            Spacer(modifier = Modifier.width(16.dp))
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = if (ratio >= 1f) "Budget Exceeded" else "Monthly Spending Budget",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
+                    if (activeBudgetsWithResults.isEmpty()) {
+                        // Empty State Card when no budgets exist
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(20.dp))
+                                .clickable(onClick = onNavigateToBudgets)
+                                .testTag("empty_budgets_card"),
+                            color = MaterialTheme.colorScheme.surface,
+                            tonalElevation = 2.dp,
+                            shape = RoundedCornerShape(20.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CircularProgressRing(
+                                    percentage = 0f,
+                                    modifier = Modifier.size(52.dp),
+                                    progressColor = MoneyMapBlue,
+                                    strokeWidth = 6.dp
                                 )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "$pct% used (${CurrencyFormatter.formatRupees(currentMonthBudgetSpent, hideAmounts)} / ${CurrencyFormatter.formatRupees(currentMonthBudget.effectiveLimitPaise, hideAmounts)})",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = TextSecondary
-                                )
-                            }
-                        } else {
-                            CircularProgressRing(
-                                percentage = 0f,
-                                modifier = Modifier.size(54.dp),
-                                progressColor = MoneyMapBlue,
-                                strokeWidth = 6.dp
-                            )
 
-                            Spacer(modifier = Modifier.width(16.dp))
+                                Spacer(modifier = Modifier.width(16.dp))
 
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "Monthly Budget",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "Tap to set monthly spending limits",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = TextSecondary
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Set a Spending Budget",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Tap to set monthly spending limits",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = TextSecondary
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(8.dp))
+                                MoneySproutIllustration(size = 38.dp)
+
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Icon(
+                                    Icons.Default.ChevronRight,
+                                    contentDescription = "View Budgets",
+                                    tint = TextSecondary
                                 )
                             }
                         }
+                    } else {
+                        // Multi-budget horizontal carousel
+                        androidx.compose.foundation.lazy.LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(activeBudgetsWithResults, key = { it.budget.id }) { item ->
+                                val b = item.budget
+                                val res = item.result
+                                val scopeLabel = item.scopeLabel
 
-                        Spacer(modifier = Modifier.width(8.dp))
-                        MoneySproutIllustration(size = 38.dp)
+                                val progressCol = when {
+                                    res.isOverBudget -> MoneyMapRed
+                                    res.isApproaching -> MoneyMapOrange
+                                    else -> MoneyMapGreen
+                                }
 
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(
-                            Icons.Default.ChevronRight,
-                            contentDescription = "View Budgets",
-                            tint = TextSecondary
-                        )
+                                Surface(
+                                    modifier = Modifier
+                                        .width(if (activeBudgetsWithResults.size == 1) 340.dp else 290.dp)
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .clickable(onClick = onNavigateToBudgets)
+                                        .testTag("dashboard_budget_card_${b.id}"),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    tonalElevation = 2.dp,
+                                    shape = RoundedCornerShape(20.dp),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle.copy(alpha = 0.6f))
+                                ) {
+                                    Column(modifier = Modifier.padding(16.dp)) {
+                                        // Header: Name & Scope Badge
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = b.name.ifBlank { "Monthly Budget" },
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 15.sp,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 1,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = MoneyMapBlue.copy(alpha = 0.12f)
+                                            ) {
+                                                Text(
+                                                    text = scopeLabel,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = MoneyMapBlue
+                                                )
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(10.dp))
+
+                                        // Spent / Limit line
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "${CurrencyFormatter.formatRupees(res.spentPaise, hideAmounts)} spent",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 15.sp,
+                                                color = if (res.isOverBudget) MoneyMapRed else MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Text(
+                                                text = "Limit: ${CurrencyFormatter.formatRupees(res.limitPaise, hideAmounts)}",
+                                                fontSize = 12.sp,
+                                                color = TextSecondary
+                                            )
+                                        }
+
+                                        Spacer(modifier = Modifier.height(8.dp))
+
+                                        // Linear Progress Bar
+                                        LinearProgressIndicator(
+                                            progress = { res.usageFraction.coerceIn(0f, 1f) },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(7.dp)
+                                                .clip(CircleShape),
+                                            color = progressCol,
+                                            trackColor = BorderSubtle.copy(alpha = 0.6f)
+                                        )
+
+                                        Spacer(modifier = Modifier.height(10.dp))
+
+                                        // Footer: Remaining Amount & Usage % Badge
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = if (res.isOverBudget) {
+                                                    "Exceeded by ${CurrencyFormatter.formatRupees(kotlin.math.abs(res.remainingPaise), hideAmounts)}"
+                                                } else {
+                                                    "Remaining: ${CurrencyFormatter.formatRupees(res.remainingPaise, hideAmounts)}"
+                                                },
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = if (res.isOverBudget) MoneyMapRed else MoneyMapGreen
+                                            )
+
+                                            Surface(
+                                                shape = RoundedCornerShape(6.dp),
+                                                color = if (res.isOverBudget) MoneyMapRedLight else MoneyMapGreenLight
+                                            ) {
+                                                Text(
+                                                    text = "${res.usagePercentage}% used",
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (res.isOverBudget) MoneyMapRed else MoneyMapNavy
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -534,5 +672,13 @@ fun DashboardScreen(
                 }
             }
         }
+    }
+
+    if (transactionToDelete != null && onDeleteTransaction != null) {
+        DeleteTransactionConfirmationDialog(
+            transaction = transactionToDelete,
+            onDismiss = { transactionToDelete = null },
+            onConfirm = { tx -> onDeleteTransaction(tx) }
+        )
     }
 }

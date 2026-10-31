@@ -28,6 +28,7 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun SplashScreen(
+    isDataLoaded: Boolean = true,
     onTimeout: () -> Unit
 ) {
     var startAnimation by remember { mutableStateOf(false) }
@@ -38,10 +39,12 @@ fun SplashScreen(
         label = "scale"
     )
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(isDataLoaded) {
         startAnimation = true
         delay(2200)
-        onTimeout()
+        if (isDataLoaded) {
+            onTimeout()
+        }
     }
 
     Box(
@@ -262,6 +265,14 @@ fun SplashScreen(
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(text = "❤️", fontSize = 14.sp)
                 }
+
+                Text(
+                    text = "Version ${com.thecorporatedeveloper.moneymap.BuildConfig.VERSION_NAME}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary.copy(alpha = 0.8f),
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 11.sp
+                )
             }
         }
     }

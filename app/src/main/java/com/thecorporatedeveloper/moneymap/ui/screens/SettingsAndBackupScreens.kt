@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -27,13 +28,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.thecorporatedeveloper.moneymap.backup.BackupManager
+import com.thecorporatedeveloper.moneymap.core.model.CurrencyRepository
 import com.thecorporatedeveloper.moneymap.data.entity.AccountEntity
 import com.thecorporatedeveloper.moneymap.data.entity.BudgetEntity
 import com.thecorporatedeveloper.moneymap.data.entity.CategoryEntity
+import com.thecorporatedeveloper.moneymap.data.entity.ReceiptEntity
 import com.thecorporatedeveloper.moneymap.data.entity.TransactionEntity
 import com.thecorporatedeveloper.moneymap.data.preferences.UserPreferences
 import com.thecorporatedeveloper.moneymap.ui.components.parseColorHex
@@ -50,15 +54,19 @@ fun SettingsScreen(
     preferences: UserPreferences,
     onSetThemeMode: (String) -> Unit,
     onSetLanguage: (String) -> Unit = {},
+    onSetNotificationTime: (Int, Int) -> Unit = { _, _ -> },
     onNavigateToCategories: () -> Unit = {},
     onNavigateToBackup: () -> Unit,
     onNavigateToPrivacy: () -> Unit,
     onNavigateToWidgetSettings: () -> Unit = {},
+    onSetQuickAmounts: (List<Long>) -> Unit = {},
+    onNavigateToCurrency: () -> Unit = {},
     onBack: () -> Unit
 ) {
     val currentAccent = parseColorHex(preferences.accentColorHex, MoneyMapBlue)
     val context = LocalContext.current
 
+    var showQuickAmountsDialog by remember { mutableStateOf(false) }
     var showPrivacyDialog by remember { mutableStateOf(false) }
     var showTermsDialog by remember { mutableStateOf(false) }
     var showDataSafetyDialog by remember { mutableStateOf(false) }
@@ -131,6 +139,30 @@ fun SettingsScreen(
                 }
             }
 
+            // YouTube Section
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    SettingsRow(
+                        icon = Icons.Default.SmartDisplay,
+                        title = "YouTube",
+                        subtitle = "Visit The Corporate Developer YouTube Channel",
+                        onClick = {
+                            val url = "https://youtube.com/@the_corporatedeveloper-yt?si=m3Taz2EpSCjudzaL"
+                            try {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "No web browser available to open YouTube", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    )
+                }
+            }
+
             // Management Navigation Section
             item {
                 Card(
@@ -139,7 +171,22 @@ fun SettingsScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Column {
+                        val currentCurr = CurrencyRepository.getCurrency(preferences.currency)
+                        SettingsRow(
+                            icon = Icons.Default.CurrencyExchange,
+                            title = "Currency",
+                            subtitle = "${currentCurr.name} (${currentCurr.symbol} ${currentCurr.code})",
+                            onClick = onNavigateToCurrency
+                        )
+                        HorizontalDivider(color = BorderSubtle.copy(alpha = 0.5f))
                         SettingsRow(icon = Icons.Default.Category, title = "Category Management", onClick = onNavigateToCategories)
+                        HorizontalDivider(color = BorderSubtle.copy(alpha = 0.5f))
+                        SettingsRow(
+                            icon = Icons.Default.Speed,
+                            title = "Quick Amount Buttons",
+                            subtitle = preferences.quickAmountsList.joinToString(", ") { "₹$it" },
+                            onClick = { showQuickAmountsDialog = true }
+                        )
                         HorizontalDivider(color = BorderSubtle.copy(alpha = 0.5f))
                         SettingsRow(icon = Icons.Default.CloudSync, title = "Backup & Restore", onClick = onNavigateToBackup)
                         HorizontalDivider(color = BorderSubtle.copy(alpha = 0.5f))
@@ -147,6 +194,8 @@ fun SettingsScreen(
                     }
                 }
             }
+
+
 
             // Legal & Compliance Section
             item {
@@ -177,6 +226,13 @@ fun SettingsScreen(
                         SettingsRow(icon = Icons.Default.HelpCenter, title = "Help & Support / FAQ", onClick = { showSupportDialog = true })
                         HorizontalDivider(color = BorderSubtle.copy(alpha = 0.5f))
                         SettingsRow(icon = Icons.Default.Info, title = "About & Licenses", onClick = { showAboutDialog = true })
+                        HorizontalDivider(color = BorderSubtle.copy(alpha = 0.5f))
+                        SettingsRow(
+                            icon = Icons.Default.SystemUpdate,
+                            title = "App Version",
+                            subtitle = com.thecorporatedeveloper.moneymap.BuildConfig.VERSION_NAME,
+                            onClick = {}
+                        )
                     }
                 }
             }
@@ -189,7 +245,7 @@ fun SettingsScreen(
                         .padding(vertical = 16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("MoneyMap v1.0", fontWeight = FontWeight.Bold, color = TextSecondary, fontSize = 13.sp)
+                    Text("MoneyMap v${com.thecorporatedeveloper.moneymap.BuildConfig.VERSION_NAME}", fontWeight = FontWeight.Bold, color = TextSecondary, fontSize = 13.sp)
                     Spacer(modifier = Modifier.height(2.dp))
                     Text("Offline-first Personal Finance • Track • Plan • Grow", color = TextSecondary, fontSize = 11.sp)
                 }
@@ -266,7 +322,26 @@ fun SettingsScreen(
                     Text("Frequently Asked Questions:")
                     Text("1. How do I backup my financial data?\nGo to Settings > Backup & Restore to export your ledger JSON file.")
                     Text("2. What if I forget my App Lock PIN?\nPINs are securely hashed on device. If forgotten, you can restore from a previous backup file.")
-                    Text("Support Email: support@moneymap.app")
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "Support Email: thecorporatedeveloper@gmail.com",
+                        color = currentAccent,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                val intent = Intent(Intent.ACTION_SENDTO).apply {
+                                    data = Uri.parse("mailto:thecorporatedeveloper@gmail.com")
+                                    putExtra(Intent.EXTRA_SUBJECT, "MoneyMap App - Support Request")
+                                }
+                                try {
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "No email application installed", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            .padding(vertical = 4.dp)
+                    )
                 }
             },
             confirmButton = {
@@ -283,7 +358,7 @@ fun SettingsScreen(
             title = { Text("About MoneyMap", fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("MoneyMap v1.0.0 (Build 100)")
+                    Text("MoneyMap v${com.thecorporatedeveloper.moneymap.BuildConfig.VERSION_NAME}")
                     Text("Tagline: Track • Plan • Grow")
                     Text("Built with native Android Jetpack Compose and Kotlin.")
                     Text("Copyright © 2026 MoneyMap. All rights reserved.")
@@ -296,12 +371,24 @@ fun SettingsScreen(
             }
         )
     }
+
+    if (showQuickAmountsDialog) {
+        QuickAmountsConfigDialog(
+            currentAmounts = preferences.quickAmountsList,
+            onDismiss = { showQuickAmountsDialog = false },
+            onSave = { updatedList ->
+                onSetQuickAmounts(updatedList)
+                showQuickAmountsDialog = false
+            }
+        )
+    }
 }
 
 @Composable
 fun SettingsRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
+    subtitle: String? = null,
     onClick: () -> Unit
 ) {
     Row(
@@ -313,9 +400,214 @@ fun SettingsRow(
     ) {
         Icon(icon, contentDescription = null, tint = MoneyMapNavy, modifier = Modifier.size(22.dp))
         Spacer(modifier = Modifier.width(14.dp))
-        Text(title, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, fontWeight = FontWeight.SemiBold)
+            if (!subtitle.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+            }
+        }
         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.LightGray)
     }
+}
+
+@Composable
+fun QuickAmountsConfigDialog(
+    currentAmounts: List<Long>,
+    onDismiss: () -> Unit,
+    onSave: (List<Long>) -> Unit
+) {
+    var amounts by remember { mutableStateOf(currentAmounts) }
+    var newAmountText by remember { mutableStateOf("") }
+    var errorText by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Quick Amount Buttons", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Configure presets shown under the transaction amount field. Add, reorder, or delete amounts.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary
+                )
+
+                // Add Amount Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = newAmountText,
+                        onValueChange = {
+                            newAmountText = it.filter { ch -> ch.isDigit() }
+                            errorText = null
+                        },
+                        label = { Text("Amount (₹)") },
+                        placeholder = { Text("e.g. 250") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("new_quick_amount_input"),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    Button(
+                        onClick = {
+                            val parsed = newAmountText.toLongOrNull()
+                            if (parsed == null || parsed <= 0L) {
+                                errorText = "Enter an amount > 0"
+                            } else if (amounts.contains(parsed)) {
+                                errorText = "₹$parsed already exists"
+                            } else {
+                                amounts = amounts + parsed
+                                newAmountText = ""
+                                errorText = null
+                            }
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MoneyMapNavy),
+                        modifier = Modifier.testTag("add_quick_amount_button")
+                    ) {
+                        Text("Add")
+                    }
+                }
+
+                errorText?.let {
+                    Text(text = it, color = MoneyMapRed, fontSize = 12.sp)
+                }
+
+                // Amounts list
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                        .padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (amounts.isEmpty()) {
+                        Text(
+                            text = "No quick amounts set",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    } else {
+                        amounts.forEachIndexed { index, amt ->
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surface,
+                                tonalElevation = 1.dp,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "₹$amt",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        modifier = Modifier.weight(1f)
+                                    )
+
+                                    // Move Up
+                                    IconButton(
+                                        onClick = {
+                                            if (index > 0) {
+                                                val mutable = amounts.toMutableList()
+                                                val item = mutable.removeAt(index)
+                                                mutable.add(index - 1, item)
+                                                amounts = mutable
+                                            }
+                                        },
+                                        enabled = index > 0,
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(Icons.Default.ArrowUpward, contentDescription = "Move up", modifier = Modifier.size(16.dp))
+                                    }
+
+                                    // Move Down
+                                    IconButton(
+                                        onClick = {
+                                            if (index < amounts.size - 1) {
+                                                val mutable = amounts.toMutableList()
+                                                val item = mutable.removeAt(index)
+                                                mutable.add(index + 1, item)
+                                                amounts = mutable
+                                            }
+                                        },
+                                        enabled = index < amounts.size - 1,
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(Icons.Default.ArrowDownward, contentDescription = "Move down", modifier = Modifier.size(16.dp))
+                                    }
+
+                                    // Delete
+                                    IconButton(
+                                        onClick = {
+                                            if (amounts.size > 1) {
+                                                amounts = amounts.toMutableList().also { it.removeAt(index) }
+                                            } else {
+                                                errorText = "Keep at least one quick amount"
+                                            }
+                                        },
+                                        enabled = amounts.size > 1,
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "Delete",
+                                            tint = if (amounts.size > 1) MoneyMapRed else Color.LightGray,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Reset Button
+                TextButton(
+                    onClick = {
+                        amounts = listOf(100L, 500L, 1000L, 2000L, 5000L)
+                        errorText = null
+                    },
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                ) {
+                    Icon(Icons.Default.RestartAlt, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Reset to Defaults (100, 500, 1000, 2000, 5000)", fontSize = 12.sp)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSave(amounts) },
+                colors = ButtonDefaults.buttonColors(containerColor = MoneyMapNavy),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.testTag("save_quick_amounts_button")
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -325,7 +617,9 @@ fun BackupRestoreScreen(
     categories: List<CategoryEntity>,
     transactions: List<TransactionEntity>,
     budgets: List<BudgetEntity>,
+    receipts: List<ReceiptEntity> = emptyList(),
     onRestore: (List<AccountEntity>, List<CategoryEntity>, List<TransactionEntity>) -> Unit,
+    onRestorePackage: ((BackupManager.BackupPackageData) -> Unit)? = null,
     onClearAllData: (onFinished: () -> Unit) -> Unit,
     onBack: () -> Unit
 ) {
@@ -333,14 +627,27 @@ fun BackupRestoreScreen(
     val coroutineScope = rememberCoroutineScope()
     var showRestoreConfirmDialog by remember { mutableStateOf(false) }
     var showClearAllDialog by remember { mutableStateOf(false) }
-    var pendingRestoreData by remember { mutableStateOf<Triple<List<AccountEntity>, List<CategoryEntity>, List<TransactionEntity>>?>(null) }
+    var pendingPackageData by remember { mutableStateOf<BackupManager.BackupPackageData?>(null) }
 
     // SAF file launchers
+    val createZipDocLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri: Uri? ->
+        uri?.let {
+            val res = BackupManager.createZipBackup(context, it, accounts, categories, transactions, budgets, receipts)
+            if (res.isSuccess) {
+                Toast.makeText(context, "Full backup with receipts saved successfully!", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "Backup failed: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     val createJsonDocLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
     ) { uri: Uri? ->
         uri?.let {
-            val json = BackupManager.createJsonBackup(accounts, categories, transactions, budgets)
+            val json = BackupManager.createJsonBackup(accounts, categories, transactions, budgets, receipts)
             val result = BackupManager.writeToUriSafely(context, it, json)
             if (result.isSuccess) {
                 Toast.makeText(context, "Backup saved successfully!", Toast.LENGTH_SHORT).show()
@@ -366,15 +673,12 @@ fun BackupRestoreScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
-            val json = BackupManager.readFromUri(context, it)
-            if (json != null) {
-                val result = BackupManager.parseJsonBackup(json)
-                if (result.isSuccess) {
-                    pendingRestoreData = result.getOrNull()
-                    showRestoreConfirmDialog = true
-                } else {
-                    Toast.makeText(context, "Error validating backup: ${result.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
-                }
+            val res = BackupManager.readBackupPackage(context, it)
+            if (res.isSuccess) {
+                pendingPackageData = res.getOrNull()
+                showRestoreConfirmDialog = true
+            } else {
+                Toast.makeText(context, "Error validating backup: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -428,6 +732,15 @@ fun BackupRestoreScreen(
                 ) {
                     Column {
                         SettingsRow(
+                            icon = Icons.Default.Inventory2,
+                            title = "Create Backup Package (ZIP with Receipts)",
+                            onClick = {
+                                val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ENGLISH).format(Date())
+                                createZipDocLauncher.launch("MoneyMap_Backup_$timestamp.zip")
+                            }
+                        )
+                        HorizontalDivider(color = BorderSubtle)
+                        SettingsRow(
                             icon = Icons.Default.CloudUpload,
                             title = "Create Backup (JSON)",
                             onClick = {
@@ -438,8 +751,8 @@ fun BackupRestoreScreen(
                         HorizontalDivider(color = BorderSubtle)
                         SettingsRow(
                             icon = Icons.Default.CloudDownload,
-                            title = "Restore Backup",
-                            onClick = { openRestoreDocLauncher.launch("application/json") }
+                            title = "Restore Backup (ZIP or JSON)",
+                            onClick = { openRestoreDocLauncher.launch("*/*") }
                         )
                     }
                 }
@@ -521,18 +834,24 @@ fun BackupRestoreScreen(
         }
     }
 
-    if (showRestoreConfirmDialog && pendingRestoreData != null) {
-        val (accs, cats, txs) = pendingRestoreData!!
+    if (showRestoreConfirmDialog && pendingPackageData != null) {
+        val pkg = pendingPackageData!!
         AlertDialog(
             onDismissRequest = { showRestoreConfirmDialog = false },
             title = { Text("Confirm Database Restore") },
             text = {
-                Text("Found ${accs.size} accounts, ${cats.size} categories, and ${txs.size} transactions. Restoring will safely update your database.")
+                val receiptText = if (pkg.receipts.isNotEmpty()) ", and ${pkg.receipts.size} receipt images" else ""
+                val budgetText = if (pkg.budgets.isNotEmpty()) ", ${pkg.budgets.size} budgets" else ""
+                Text("Found ${pkg.accounts.size} accounts, ${pkg.categories.size} categories, ${pkg.transactions.size} transactions$budgetText$receiptText. Restoring will safely update your database.")
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        onRestore(accs, cats, txs)
+                        if (onRestorePackage != null) {
+                            onRestorePackage(pkg)
+                        } else {
+                            onRestore(pkg.accounts, pkg.categories, pkg.transactions)
+                        }
                         showRestoreConfirmDialog = false
                         Toast.makeText(context, "Database restored successfully!", Toast.LENGTH_SHORT).show()
                     }

@@ -29,6 +29,7 @@ import com.thecorporatedeveloper.moneymap.data.entity.AccountEntity
 import com.thecorporatedeveloper.moneymap.data.entity.CategoryEntity
 import com.thecorporatedeveloper.moneymap.data.entity.TransactionEntity
 import com.thecorporatedeveloper.moneymap.ui.components.TransactionItemRow
+import com.thecorporatedeveloper.moneymap.ui.components.DeleteTransactionConfirmationDialog
 import com.thecorporatedeveloper.moneymap.ui.components.MoneySproutIllustration
 import com.thecorporatedeveloper.moneymap.ui.components.PennyIllustration
 import com.thecorporatedeveloper.moneymap.ui.components.getCategoryIcon
@@ -44,6 +45,77 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.launch
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.thecorporatedeveloper.moneymap.data.entity.ReceiptEntity
+import com.thecorporatedeveloper.moneymap.receipt.ReceiptStorageManager
+import java.io.File
+
+sealed class CategoryChipItem {
+    data class Category(val entity: CategoryEntity) : CategoryChipItem()
+    object AddCategoryButton : CategoryChipItem()
+}
+
+private fun getEstimatedChipWidthDp(name: String): Int {
+    return 52 + (name.length * 8)
+}
+
+private fun partitionCategoriesIntoPages(
+    categories: List<CategoryEntity>,
+    availableWidthDp: Int = 340
+): List<List<CategoryChipItem>> {
+    if (categories.isEmpty()) return emptyList()
+
+    val items = categories.map { CategoryChipItem.Category(it) } + CategoryChipItem.AddCategoryButton
+    val pages = mutableListOf<List<CategoryChipItem>>()
+    var currentPageItems = mutableListOf<CategoryChipItem>()
+
+    var currentRowWidth = 0
+    var currentRowCount = 1
+    val itemSpacing = 8
+
+    for (item in items) {
+        val itemWidth = when (item) {
+            is CategoryChipItem.Category -> getEstimatedChipWidthDp(item.entity.name)
+            is CategoryChipItem.AddCategoryButton -> 120
+        }
+
+        val spaceNeeded = if (currentRowWidth == 0) itemWidth else currentRowWidth + itemSpacing + itemWidth
+
+        if (spaceNeeded <= availableWidthDp) {
+            currentRowWidth = spaceNeeded
+            currentPageItems.add(item)
+        } else {
+            if (currentRowCount < 3) {
+                currentRowCount++
+                currentRowWidth = itemWidth
+                currentPageItems.add(item)
+            } else {
+                pages.add(currentPageItems)
+                currentPageItems = mutableListOf(item)
+                currentRowCount = 1
+                currentRowWidth = itemWidth
+            }
+        }
+    }
+
+    if (currentPageItems.isNotEmpty()) {
+        pages.add(currentPageItems)
+    }
+
+    return pages
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -52,15 +124,106 @@ fun AddEditTransactionScreen(
     preselectedType: TransactionType? = null,
     accounts: List<AccountEntity>,
     categories: List<CategoryEntity>,
+    existingReceipts: List<ReceiptEntity> = emptyList(),
+    initialPendingReceiptFiles: List<File> = emptyList(),
+    defaultAccountId: Long = 0L,
+    quickAmounts: List<Long> = listOf(100L, 500L, 1000L, 2000L, 5000L),
+    onSetDefaultAccount: ((Long) -> Unit)? = null,
+    onUpdateQuickAmounts: ((List<Long>) -> Unit)? = null,
     onSave: suspend (TransactionEntity) -> Boolean,
+    onSaveWithReceipts: (suspend (TransactionEntity, List<File>) -> Boolean)? = null,
     onNavigateToAddAccount: () -> Unit = {},
     onNavigateToCategories: () -> Unit = {},
     onBack: () -> Unit
 ) {
+    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var saveErrorMsg by remember { mutableStateOf<String?>(null) }
     var insufficientBalanceErrorMsg by remember { mutableStateOf<String?>(null) }
     var showPennySuccess by remember { mutableStateOf(false) }
+    var showQuickAmountsConfigDialog by remember { mutableStateOf(false) }
+
+    // Receipts state
+    var pendingReceiptFiles by remember(initialPendingReceiptFiles) { mutableStateOf<List<File>>(initialPendingReceiptFiles) }
+    var currentExistingReceipts by remember(existingReceipts) { mutableStateOf(existingReceipts) }
+    var showAddReceiptSheet by remember { mutableStateOf(false) }
+    var tempCameraFile by remember { mutableStateOf<File?>(null) }
+    var showCameraPermissionRationale by remember { mutableStateOf(false) }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && tempCameraFile != null && tempCameraFile!!.exists()) {
+            pendingReceiptFiles = pendingReceiptFiles + tempCameraFile!!
+        }
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            val temp = ReceiptStorageManager.createTempReceiptFile(context)
+            tempCameraFile = temp
+            val uri = ReceiptStorageManager.getFileProviderUri(context, temp)
+            try {
+                cameraLauncher.launch(uri)
+            } catch (e: Exception) {
+                Toast.makeText(context, "Cannot open camera: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            showCameraPermissionRationale = true
+        }
+    }
+
+    val pickMediaLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 10)
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            coroutineScope.launch {
+                val copiedFiles = mutableListOf<File>()
+                for (uri in uris) {
+                    val temp = ReceiptStorageManager.copyUriToTempFile(context, uri)
+                    if (temp != null) {
+                        copiedFiles.add(temp)
+                    }
+                }
+                if (copiedFiles.isNotEmpty()) {
+                    pendingReceiptFiles = pendingReceiptFiles + copiedFiles
+                }
+            }
+        }
+    }
+
+    val launchCameraCapture: () -> Unit = {
+        val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.CAMERA
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        if (hasPermission) {
+            val temp = ReceiptStorageManager.createTempReceiptFile(context)
+            tempCameraFile = temp
+            val uri = ReceiptStorageManager.getFileProviderUri(context, temp)
+            try {
+                cameraLauncher.launch(uri)
+            } catch (e: Exception) {
+                Toast.makeText(context, "Cannot open camera: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+        }
+    }
+
+    val launchGalleryPick: () -> Unit = {
+        try {
+            pickMediaLauncher.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            )
+        } catch (e: Exception) {
+            Toast.makeText(context, "Cannot open gallery: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     var type by remember { mutableStateOf(initialTransaction?.type ?: preselectedType ?: TransactionType.EXPENSE) }
     var amountInput by remember {
         mutableStateOf(if (initialTransaction != null) (initialTransaction.amountPaise / 100.0).toString() else "")
@@ -75,15 +238,26 @@ fun AddEditTransactionScreen(
     var showTimePicker by remember { mutableStateOf(false) }
 
     var selectedAccountId by remember {
-        mutableStateOf(initialTransaction?.accountId ?: accounts.firstOrNull()?.id ?: 0L)
+        val initialAcc = if (initialTransaction != null) {
+            initialTransaction.accountId
+        } else if (defaultAccountId != 0L && accounts.any { it.id == defaultAccountId }) {
+            defaultAccountId
+        } else {
+            accounts.firstOrNull()?.id ?: 0L
+        }
+        mutableStateOf(initialAcc)
     }
     var selectedToAccountId by remember {
         mutableStateOf(initialTransaction?.toAccountId ?: accounts.getOrNull(1)?.id ?: 0L)
     }
 
-    LaunchedEffect(accounts) {
+    LaunchedEffect(accounts, defaultAccountId) {
         if (selectedAccountId == 0L || accounts.none { it.id == selectedAccountId }) {
-            selectedAccountId = accounts.firstOrNull()?.id ?: 0L
+            selectedAccountId = if (defaultAccountId != 0L && accounts.any { it.id == defaultAccountId }) {
+                defaultAccountId
+            } else {
+                accounts.firstOrNull()?.id ?: 0L
+            }
         }
         if (selectedToAccountId == 0L || accounts.none { it.id == selectedToAccountId }) {
             selectedToAccountId = accounts.firstOrNull { it.id != selectedAccountId }?.id ?: 0L
@@ -92,8 +266,9 @@ fun AddEditTransactionScreen(
 
     val filteredCategories = remember(categories, type, initialTransaction) {
         categories.filter {
-            it.type == type && (!it.isArchived || it.id == initialTransaction?.categoryId) && (it.isFavorite || it.id == initialTransaction?.categoryId)
-        }
+            it.type == type && (!it.isArchived || it.id == initialTransaction?.categoryId) &&
+            (it.isFavorite || it.id == initialTransaction?.categoryId)
+        }.sortedWith(compareByDescending<CategoryEntity> { it.isFavorite }.thenBy { it.name })
     }
     var selectedCategoryId by remember {
         mutableStateOf(initialTransaction?.categoryId ?: filteredCategories.firstOrNull()?.id)
@@ -101,10 +276,29 @@ fun AddEditTransactionScreen(
 
     LaunchedEffect(type) {
         val cats = categories.filter {
-            it.type == type && (!it.isArchived || it.id == initialTransaction?.categoryId) && (it.isFavorite || it.id == initialTransaction?.categoryId)
-        }
+            it.type == type && (!it.isArchived || it.id == initialTransaction?.categoryId) &&
+            (it.isFavorite || it.id == initialTransaction?.categoryId)
+        }.sortedWith(compareByDescending<CategoryEntity> { it.isFavorite }.thenBy { it.name })
         if (selectedCategoryId == null || cats.none { it.id == selectedCategoryId }) {
             selectedCategoryId = cats.firstOrNull()?.id
+        }
+    }
+
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val screenWidthDp = remember(configuration) { (configuration.screenWidthDp - 32).coerceAtLeast(280) }
+
+    val categoryPages = remember(filteredCategories, screenWidthDp) {
+        partitionCategoriesIntoPages(filteredCategories, screenWidthDp)
+    }
+
+    val pagerState = androidx.compose.foundation.pager.rememberPagerState(
+        initialPage = 0,
+        pageCount = { categoryPages.size }
+    )
+
+    LaunchedEffect(type) {
+        if (categoryPages.isNotEmpty()) {
+            pagerState.scrollToPage(0)
         }
     }
 
@@ -205,19 +399,38 @@ fun AddEditTransactionScreen(
                 }
             }
 
-            // Quick Amount Suggestion Pills
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    listOf("100", "500", "1,000", "2,000", "5,000").forEach { quick ->
-                        val plainNum = quick.replace(",", "")
-                        FilterChip(
-                            selected = amountInput == plainNum,
-                            onClick = { amountInput = plainNum },
-                            label = { Text("₹$quick", fontSize = 12.sp) }
-                        )
+            // Quick Amount Suggestion Pills (Customizable)
+            if (quickAmounts.isNotEmpty() || onUpdateQuickAmounts != null) {
+                item {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        quickAmounts.forEach { quickVal ->
+                            val numStr = quickVal.toString()
+                            val formatted = CurrencyFormatter.formatRupees(quickVal * 100L)
+                            FilterChip(
+                                selected = amountInput == numStr,
+                                onClick = { amountInput = numStr },
+                                label = { Text(formatted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
+                            )
+                        }
+                        if (onUpdateQuickAmounts != null) {
+                            AssistChip(
+                                onClick = { showQuickAmountsConfigDialog = true },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Add,
+                                        contentDescription = "Customize quick amounts",
+                                        modifier = Modifier.size(14.dp),
+                                        tint = MoneyMapNavy
+                                    )
+                                },
+                                label = { Text("+", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MoneyMapNavy) },
+                                modifier = Modifier.testTag("add_quick_amount_button")
+                            )
+                        }
                     }
                 }
             }
@@ -279,7 +492,13 @@ fun AddEditTransactionScreen(
                                 onClick = onNavigateToCategories,
                                 modifier = Modifier.testTag("manage_categories_button")
                             ) {
-                                Text("Manage", fontSize = 12.sp, color = MoneyMapBlue)
+                                Text(
+                                    text = "Manage",
+                                    fontSize = 12.sp,
+                                    color = MoneyMapBlue,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
                             }
                         }
                         Spacer(modifier = Modifier.height(4.dp))
@@ -287,72 +506,131 @@ fun AddEditTransactionScreen(
                             Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .clickable(onClick = onNavigateToCategories)
-                                    .padding(vertical = 4.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                shape = RoundedCornerShape(12.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .testTag("empty_category_state_card"),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                shape = RoundedCornerShape(16.dp),
+                                border = BorderStroke(1.dp, BorderSubtle.copy(alpha = 0.5f))
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Row(
-                                        modifier = Modifier.weight(1f),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.StarBorder,
-                                            contentDescription = null,
-                                            tint = MoneyMapBlue,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            "No favourite ${type.name.lowercase()} categories yet.",
-                                            color = MoneyMapNavy,
-                                            fontSize = 13.sp
-                                        )
-                                    }
-                                    TextButton(
+                                    Text(
+                                        text = "No Favourite ${if (type == TransactionType.EXPENSE) "Expense" else "Income"} Categories",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                    Text(
+                                        text = "Add your own categories and mark your favourites to see them here.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSecondary,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Button(
                                         onClick = onNavigateToCategories,
-                                        modifier = Modifier.testTag("empty_state_manage_categories_button")
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = MoneyMapNavy),
+                                        modifier = Modifier.testTag("empty_state_add_category_button")
                                     ) {
-                                        Text("Manage Categories", fontSize = 12.sp, color = MoneyMapBlue)
+                                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("+ Add Category", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                     }
+                                    Text(
+                                        text = "You can manage all your categories anytime.",
+                                        fontSize = 11.sp,
+                                        color = TextSecondary,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
                                 }
                             }
                         } else {
-                            FlowRow(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                filteredCategories.forEach { cat ->
-                                    val isSel = selectedCategoryId == cat.id
-                                    val catCol = parseColorHex(cat.colorHex, MoneyMapBlue)
-                                    FilterChip(
-                                        selected = isSel,
-                                        onClick = { selectedCategoryId = cat.id },
-                                        leadingIcon = {
-                                            Icon(
-                                                imageVector = getCategoryIcon(cat.iconName),
-                                                contentDescription = null,
-                                                tint = if (isSel) Color.White else catCol,
-                                                modifier = Modifier.size(16.dp)
-                                            )
-                                        },
-                                        label = { Text(cat.name, fontSize = 12.sp) }
-                                    )
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                androidx.compose.foundation.pager.HorizontalPager(
+                                    state = pagerState,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) { pageIndex ->
+                                    val pageItems = categoryPages.getOrNull(pageIndex) ?: emptyList()
+                                    FlowRow(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        pageItems.forEach { item ->
+                                            when (item) {
+                                                is CategoryChipItem.Category -> {
+                                                    val cat = item.entity
+                                                    val isSel = selectedCategoryId == cat.id
+                                                    val catCol = parseColorHex(cat.colorHex, MoneyMapBlue)
+                                                    FilterChip(
+                                                        selected = isSel,
+                                                        onClick = { selectedCategoryId = cat.id },
+                                                        leadingIcon = {
+                                                            Icon(
+                                                                imageVector = getCategoryIcon(cat.iconName),
+                                                                contentDescription = null,
+                                                                tint = if (isSel) Color.White else catCol,
+                                                                modifier = Modifier.size(16.dp)
+                                                            )
+                                                        },
+                                                        label = {
+                                                            Text(
+                                                                text = cat.name,
+                                                                fontSize = 12.sp,
+                                                                maxLines = 1,
+                                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                                            )
+                                                        },
+                                                        colors = FilterChipDefaults.filterChipColors(
+                                                            selectedContainerColor = MoneyMapNavy,
+                                                            selectedLabelColor = Color.White,
+                                                            selectedLeadingIconColor = Color.White
+                                                        )
+                                                    )
+                                                }
+                                                is CategoryChipItem.AddCategoryButton -> {
+                                                    AssistChip(
+                                                        onClick = onNavigateToCategories,
+                                                        leadingIcon = {
+                                                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                        },
+                                                        label = { Text("+ Category", fontSize = 12.sp) }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
-                                AssistChip(
-                                    onClick = onNavigateToCategories,
-                                    leadingIcon = {
-                                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
-                                    },
-                                    label = { Text("+ Category", fontSize = 12.sp) }
-                                )
+
+                                if (categoryPages.size > 1) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.Center,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        repeat(categoryPages.size) { iteration ->
+                                            val isSelected = pagerState.currentPage == iteration
+                                            Box(
+                                                modifier = Modifier
+                                                    .padding(horizontal = 3.dp)
+                                                    .height(8.dp)
+                                                    .width(if (isSelected) 18.dp else 8.dp)
+                                                    .clip(CircleShape)
+                                                    .background(
+                                                        if (isSelected) MoneyMapNavy else BorderSubtle
+                                                    )
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -362,17 +640,64 @@ fun AddEditTransactionScreen(
             // Account Selection (From Account)
             item {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(if (type == TransactionType.TRANSFER) "From Account" else "Account", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            if (type == TransactionType.TRANSFER) "From Account" else "Account",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp
+                        )
+                        if (type != TransactionType.TRANSFER && selectedAccountId != 0L) {
+                            val isDefault = selectedAccountId == defaultAccountId
+                            TextButton(
+                                onClick = {
+                                    if (!isDefault) {
+                                        onSetDefaultAccount?.invoke(selectedAccountId)
+                                    }
+                                },
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                                modifier = Modifier.height(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isDefault) Icons.Default.Star else Icons.Default.StarBorder,
+                                    contentDescription = null,
+                                    tint = if (isDefault) Color(0xFFF59E0B) else TextSecondary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (isDefault) "Default Account" else "Set as Default",
+                                    fontSize = 11.sp,
+                                    color = if (isDefault) Color(0xFFD97706) else MoneyMapBlue,
+                                    fontWeight = if (isDefault) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
                     androidx.compose.foundation.lazy.LazyRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(accounts, key = { it.id }) { acc ->
                             val isSel = selectedAccountId == acc.id
+                            val isDefault = acc.id == defaultAccountId
                             FilterChip(
                                 selected = isSel,
                                 onClick = { selectedAccountId = acc.id },
+                                leadingIcon = if (isDefault) {
+                                    {
+                                        Icon(
+                                            Icons.Default.Star,
+                                            contentDescription = "Default Account",
+                                            tint = if (isSel) Color.White else Color(0xFFF59E0B),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                } else null,
                                 label = { Text(acc.name, fontSize = 12.sp) }
                             )
                         }
@@ -423,6 +748,90 @@ fun AddEditTransactionScreen(
                         .testTag("transaction_note_field"),
                     shape = RoundedCornerShape(12.dp)
                 )
+            }
+
+            // Receipt Attachment Section (Screen 1 & Screen 6)
+            item {
+                if (pendingReceiptFiles.isEmpty() && currentExistingReceipts.isEmpty()) {
+                    // Screen 1: Empty state card "Add Receipt (Optional)"
+                    Surface(
+                        onClick = { showAddReceiptSheet = true },
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        border = BorderStroke(1.dp, BorderSubtle.copy(alpha = 0.6f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("add_receipt_button_card")
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MoneyMapBlueLight),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Receipt,
+                                    contentDescription = null,
+                                    tint = MoneyMapBlue,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Add Receipt (Optional)",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 14.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Take a photo or choose from gallery",
+                                    fontSize = 12.sp,
+                                    color = TextSecondary
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                tint = TextSecondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                } else {
+                    // Screen 6: Attached Receipts Row
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        border = BorderStroke(1.dp, BorderSubtle.copy(alpha = 0.6f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("attached_receipts_card")
+                    ) {
+                        Box(modifier = Modifier.padding(14.dp)) {
+                            AttachedReceiptsRow(
+                                receiptFiles = pendingReceiptFiles,
+                                receiptEntities = currentExistingReceipts,
+                                onAddMore = { showAddReceiptSheet = true },
+                                onReceiptClick = { _ -> },
+                                onRemoveReceipt = { index ->
+                                    if (pendingReceiptFiles.isNotEmpty() && index < pendingReceiptFiles.size) {
+                                        pendingReceiptFiles = pendingReceiptFiles.toMutableList().apply { removeAt(index) }
+                                    } else if (currentExistingReceipts.isNotEmpty()) {
+                                        currentExistingReceipts = currentExistingReceipts.toMutableList().apply { removeAt(index) }
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
             }
 
             // Date & Time Selector
@@ -527,7 +936,11 @@ fun AddEditTransactionScreen(
                         )
                         coroutineScope.launch {
                             try {
-                                val success = onSave(tx)
+                                val success = if (onSaveWithReceipts != null) {
+                                    onSaveWithReceipts(tx, pendingReceiptFiles)
+                                } else {
+                                    onSave(tx)
+                                }
                                 if (success) {
                                     showPennySuccess = true
                                     kotlinx.coroutines.delay(700)
@@ -772,6 +1185,48 @@ fun AddEditTransactionScreen(
             }
         )
     }
+
+    if (showCameraPermissionRationale) {
+        AlertDialog(
+            onDismissRequest = { showCameraPermissionRationale = false },
+            title = { Text("Camera Permission Required", fontWeight = FontWeight.Bold) },
+            text = { Text("MoneyMap needs camera access to capture receipt photos.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showCameraPermissionRationale = false
+                        cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+                    }
+                ) {
+                    Text("Grant Permission", fontWeight = FontWeight.Bold, color = MoneyMapNavy)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCameraPermissionRationale = false }) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            }
+        )
+    }
+
+    if (showQuickAmountsConfigDialog && onUpdateQuickAmounts != null) {
+        com.thecorporatedeveloper.moneymap.ui.screens.QuickAmountsConfigDialog(
+            currentAmounts = quickAmounts,
+            onSave = { updated ->
+                onUpdateQuickAmounts(updated)
+                showQuickAmountsConfigDialog = false
+            },
+            onDismiss = { showQuickAmountsConfigDialog = false }
+        )
+    }
+
+    if (showAddReceiptSheet) {
+        AddReceiptBottomSheet(
+            onDismiss = { showAddReceiptSheet = false },
+            onTakePhoto = { launchCameraCapture() },
+            onChooseGallery = { launchGalleryPick() }
+        )
+    }
 }
 
 @Composable
@@ -784,10 +1239,13 @@ fun TransactionHistoryScreen(
     onNavigateToDetails: (Long) -> Unit,
     onNavigateToAdd: () -> Unit,
     onNavigateToFavorites: () -> Unit = {},
-    onToggleFavorite: ((TransactionEntity) -> Unit)? = null
+    onToggleFavorite: ((TransactionEntity) -> Unit)? = null,
+    onNavigateToEdit: ((Long) -> Unit)? = null,
+    onDeleteTransaction: ((TransactionEntity) -> Unit)? = null
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedTypeFilter by remember { mutableStateOf<TransactionType?>(null) }
+    var transactionToDelete by remember { mutableStateOf<TransactionEntity?>(null) }
 
     val categoryMap = remember(categories) { categories.associateBy { it.id } }
     val accountMap = remember(accounts) { accounts.associateBy { it.id } }
@@ -1025,6 +1483,14 @@ fun TransactionHistoryScreen(
             }
         }
     }
+
+    if (transactionToDelete != null && onDeleteTransaction != null) {
+        DeleteTransactionConfirmationDialog(
+            transaction = transactionToDelete,
+            onDismiss = { transactionToDelete = null },
+            onConfirm = { tx -> onDeleteTransaction(tx) }
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1034,14 +1500,118 @@ fun TransactionDetailsScreen(
     category: CategoryEntity?,
     account: AccountEntity?,
     toAccount: AccountEntity?,
+    receipts: List<ReceiptEntity> = emptyList(),
     hideAmounts: Boolean,
     onBack: () -> Unit,
     onEdit: () -> Unit,
     onDuplicate: () -> Unit,
     onDelete: () -> Unit,
-    onToggleFavorite: () -> Unit = {}
+    onToggleFavorite: () -> Unit = {},
+    onViewReceipt: (ReceiptEntity) -> Unit = {},
+    onViewAllReceipts: () -> Unit = {},
+    onAddReceiptFile: (File) -> Unit = {},
+    onDeleteReceipt: (ReceiptEntity) -> Unit = {},
+    onShareReceipt: (ReceiptEntity) -> Unit = {},
+    onDownloadReceipt: (ReceiptEntity) -> Unit = {},
+    onReplaceReceipt: (ReceiptEntity, File) -> Unit = { _, _ -> }
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+
+    // Receipts states
+    var selectedReceiptForOptions by remember { mutableStateOf<ReceiptEntity?>(null) }
+    var receiptToRemove by remember { mutableStateOf<ReceiptEntity?>(null) }
+    var showAddReceiptSheet by remember { mutableStateOf(false) }
+    var tempCameraFile by remember { mutableStateOf<File?>(null) }
+    var receiptToReplace by remember { mutableStateOf<ReceiptEntity?>(null) }
+    var showCameraPermissionRationale by remember { mutableStateOf(false) }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && tempCameraFile != null && tempCameraFile!!.exists()) {
+            if (receiptToReplace != null) {
+                onReplaceReceipt(receiptToReplace!!, tempCameraFile!!)
+                receiptToReplace = null
+            } else {
+                onAddReceiptFile(tempCameraFile!!)
+            }
+        }
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            val temp = ReceiptStorageManager.createTempReceiptFile(context)
+            tempCameraFile = temp
+            val uri = ReceiptStorageManager.getFileProviderUri(context, temp)
+            try {
+                cameraLauncher.launch(uri)
+            } catch (e: Exception) {
+                Toast.makeText(context, "Cannot open camera: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            showCameraPermissionRationale = true
+        }
+    }
+
+    val pickMediaLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 10)
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            coroutineScope.launch {
+                val copiedFiles = mutableListOf<File>()
+                for (uri in uris) {
+                    val temp = ReceiptStorageManager.copyUriToTempFile(context, uri)
+                    if (temp != null) {
+                        copiedFiles.add(temp)
+                    }
+                }
+                if (copiedFiles.isNotEmpty()) {
+                    if (receiptToReplace != null && copiedFiles.isNotEmpty()) {
+                        onReplaceReceipt(receiptToReplace!!, copiedFiles.first())
+                        receiptToReplace = null
+                    } else {
+                        for (file in copiedFiles) {
+                            onAddReceiptFile(file)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    val launchCameraCapture: () -> Unit = {
+        val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.CAMERA
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        if (hasPermission) {
+            val temp = ReceiptStorageManager.createTempReceiptFile(context)
+            tempCameraFile = temp
+            val uri = ReceiptStorageManager.getFileProviderUri(context, temp)
+            try {
+                cameraLauncher.launch(uri)
+            } catch (e: Exception) {
+                Toast.makeText(context, "Cannot open camera: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+        }
+    }
+
+    val launchGalleryPick: () -> Unit = {
+        try {
+            pickMediaLauncher.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+            )
+        } catch (e: Exception) {
+            Toast.makeText(context, "Cannot open gallery: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     val catColor = category?.let { parseColorHex(it.colorHex, MoneyMapBlue) } ?: MoneyMapNavy
     val icon = category?.iconName?.let { getCategoryIcon(it) } ?: Icons.Default.Receipt
@@ -1075,15 +1645,16 @@ fun TransactionDetailsScreen(
             )
         }
     ) { innerPadding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = 16.dp),
+            contentPadding = PaddingValues(vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                // Hero Header Card
+            // Hero Header Card
+            item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
@@ -1138,8 +1709,10 @@ fun TransactionDetailsScreen(
                         )
                     }
                 }
+            }
 
-                // Attributes List
+            // Attributes List
+            item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
@@ -1165,31 +1738,150 @@ fun TransactionDetailsScreen(
                 }
             }
 
-            // Bottom Actions: Edit, Duplicate
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(
-                    onClick = onEdit,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MoneyMapNavy)
-                ) {
-                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Edit Transaction", fontWeight = FontWeight.Bold)
-                }
+            // Receipts section (Screen 7 if receipts present, Screen 12 if none)
+            item {
+                if (receipts.isNotEmpty()) {
+                    // Screen 7: Receipts (N) with thumbnails, remove 'x', right chevron
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("transaction_receipts_card"),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onViewAllReceipts() }
+                                    .testTag("view_all_receipts_row"),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Receipts (${receipts.size})",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.ChevronRight,
+                                    contentDescription = "View all receipts",
+                                    tint = TextSecondary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
 
-                OutlinedButton(
-                    onClick = onDuplicate,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Duplicate", fontWeight = FontWeight.SemiBold)
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                itemsIndexed(receipts, key = { _, r -> r.id }) { index, r ->
+                                    val thumbFile = ReceiptStorageManager.getReceiptThumbnailFile(context, r)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(width = 80.dp, height = 80.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .border(1.dp, BorderSubtle, RoundedCornerShape(12.dp))
+                                            .clickable { onViewReceipt(r) }
+                                            .testTag("detail_receipt_thumb_$index")
+                                    ) {
+                                        AsyncImage(
+                                            model = ImageRequest.Builder(context).data(thumbFile).crossfade(true).build(),
+                                            contentDescription = "Receipt $index",
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+
+                                        Box(
+                                            modifier = Modifier
+                                                .padding(4.dp)
+                                                .size(20.dp)
+                                                .clip(CircleShape)
+                                                .background(Color.Black.copy(alpha = 0.65f))
+                                                .clickable { receiptToRemove = r }
+                                                .align(Alignment.TopEnd)
+                                                .testTag("detail_remove_receipt_$index"),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Close,
+                                                contentDescription = "Remove",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Screen 12: Receipts section with "+ Add Receipt" button
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("empty_receipts_card"),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = "Receipts",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            OutlinedButton(
+                                onClick = { showAddReceiptSheet = true },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .testTag("details_add_receipt_button"),
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, MoneyMapBlue.copy(alpha = 0.6f))
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, tint = MoneyMapBlue, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("+ Add Receipt", fontWeight = FontWeight.SemiBold, color = MoneyMapBlue)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Bottom Actions: Edit, Duplicate
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(
+                        onClick = onEdit,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                            .testTag("edit_transaction_button"),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MoneyMapNavy)
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Edit Transaction", fontWeight = FontWeight.Bold)
+                    }
+
+                    OutlinedButton(
+                        onClick = onDuplicate,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                            .testTag("duplicate_transaction_button"),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Duplicate", fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
         }
@@ -1213,6 +1905,84 @@ fun TransactionDetailsScreen(
                     Text("Cancel")
                 }
             }
+        )
+    }
+
+    if (selectedReceiptForOptions != null) {
+        val idx = receipts.indexOfFirst { it.id == selectedReceiptForOptions!!.id } + 1
+        ReceiptOptionsBottomSheet(
+            receipt = selectedReceiptForOptions!!,
+            receiptIndex = if (idx > 0) idx else 1,
+            onDismiss = { selectedReceiptForOptions = null },
+            onView = {
+                val r = selectedReceiptForOptions!!
+                selectedReceiptForOptions = null
+                onViewReceipt(r)
+            },
+            onDownload = {
+                val r = selectedReceiptForOptions!!
+                selectedReceiptForOptions = null
+                onDownloadReceipt(r)
+            },
+            onShare = {
+                val r = selectedReceiptForOptions!!
+                selectedReceiptForOptions = null
+                onShareReceipt(r)
+            },
+            onReplace = {
+                receiptToReplace = selectedReceiptForOptions
+                selectedReceiptForOptions = null
+                showAddReceiptSheet = true
+            },
+            onRemove = {
+                receiptToRemove = selectedReceiptForOptions
+                selectedReceiptForOptions = null
+            }
+        )
+    }
+
+    if (receiptToRemove != null) {
+        RemoveReceiptDialog(
+            onDismiss = { receiptToRemove = null },
+            onConfirm = {
+                val toDelete = receiptToRemove!!
+                receiptToRemove = null
+                onDeleteReceipt(toDelete)
+            }
+        )
+    }
+
+    if (showCameraPermissionRationale) {
+        AlertDialog(
+            onDismissRequest = { showCameraPermissionRationale = false },
+            title = { Text("Camera Permission Required", fontWeight = FontWeight.Bold) },
+            text = { Text("MoneyMap needs camera access to capture receipt photos.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showCameraPermissionRationale = false
+                        cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+                    }
+                ) {
+                    Text("Grant Permission", fontWeight = FontWeight.Bold, color = MoneyMapNavy)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCameraPermissionRationale = false }) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            }
+        )
+    }
+
+    if (showAddReceiptSheet) {
+        AddReceiptBottomSheet(
+            onDismiss = {
+                showAddReceiptSheet = false
+                receiptToReplace = null
+            },
+            onTakePhoto = { launchCameraCapture() },
+            onChooseGallery = { launchGalleryPick() }
         )
     }
 }

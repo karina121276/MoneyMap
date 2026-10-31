@@ -23,6 +23,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import com.thecorporatedeveloper.moneymap.core.model.TransactionType
 import com.thecorporatedeveloper.moneymap.data.entity.CategoryEntity
 import com.thecorporatedeveloper.moneymap.data.entity.TransactionEntity
@@ -30,7 +34,7 @@ import com.thecorporatedeveloper.moneymap.ui.components.getCategoryIcon
 import com.thecorporatedeveloper.moneymap.ui.components.parseColorHex
 import com.thecorporatedeveloper.moneymap.ui.theme.*
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun CategoryManagementScreen(
     categories: List<CategoryEntity>,
@@ -69,20 +73,52 @@ fun CategoryManagementScreen(
     }
 
     val selectableIcons = listOf(
-        "restaurant", "shopping_cart", "shopping_bag", "directions_car",
-        "local_gas_station", "build", "receipt_long", "bolt",
-        "phone_android", "home", "school", "local_hospital",
-        "sports_esports", "spa", "flight", "roofing",
-        "card_giftcard", "payments", "work", "business",
-        "trending_up", "account_balance", "savings", "percent",
-        "apartment", "subscriptions", "devices", "fitness_center",
-        "local_cafe", "pets", "more_horiz"
+        // Food & Groceries
+        "fish", "chicken", "vegetables", "fruits", "grocery_basket",
+        "shopping_cart", "restaurant", "local_cafe", "cake", "fastfood",
+
+        // Shopping & Lifestyle
+        "checkroom", "shopping_bag", "brush", "watch", "devices",
+        "chair", "card_giftcard", "spa", "sports_esports", "fitness_center",
+
+        // Transport & Utilities
+        "directions_car", "two_wheeler", "directions_bus", "train",
+        "local_gas_station", "bolt", "water_drop", "phone_android",
+        "wifi", "home", "receipt_long", "build",
+
+        // Income & Finance
+        "payments", "account_balance_wallet", "account_balance", "business",
+        "work", "trending_up", "percent", "redeem", "savings", "credit_card",
+
+        // Health, Education & Family
+        "local_hospital", "school", "flight", "subscriptions", "pets", "more_horiz"
     )
 
     val selectableColors = listOf(
-        "#EF4444", "#F59E0B", "#10B981", "#3B82F6",
-        "#8B5CF6", "#06B6D4", "#EC4899", "#6366F1",
-        "#14B8A6", "#F97316", "#84CC16", "#64748B"
+        "#EF4444", // Red
+        "#F43F5E", // Rose
+        "#EC4899", // Pink
+        "#D946EF", // Magenta
+        "#8B5CF6", // Purple
+        "#7C3AED", // Violet
+        "#6366F1", // Indigo
+        "#3B82F6", // Blue
+        "#1E56F0", // MoneyMap Blue
+        "#0EA5E9", // Sky Blue
+        "#06B6D4", // Cyan
+        "#14B8A6", // Teal
+        "#34D399", // Mint
+        "#10B981", // Emerald
+        "#22C55E", // Green
+        "#84CC16", // Lime
+        "#EAB308", // Yellow
+        "#F59E0B", // Amber
+        "#F97316", // Orange
+        "#EA580C", // Deep Orange
+        "#8D5B4C", // Brown
+        "#78716C", // Warm Grey
+        "#64748B", // Slate
+        "#334155"  // Dark Grey
     )
 
     Scaffold(
@@ -206,13 +242,13 @@ fun CategoryManagementScreen(
                             Icon(Icons.Default.Category, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(48.dp))
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(
-                                text = if (favoriteFilter == "FAVORITES") "No favourite ${selectedType.name.lowercase()} categories yet" else "No ${selectedType.name.lowercase()} categories",
+                                text = if (favoriteFilter == "FAVORITES") "No favourite categories yet" else "No categories yet",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = if (favoriteFilter == "FAVORITES") "Tap the star on any category to add it to favourites." else "Add a new category to organize your transactions.",
+                                text = if (favoriteFilter == "FAVORITES") "Tap the star on any category to add it to favourites." else "Create your first category to organize your transactions.",
                                 color = TextSecondary,
                                 fontSize = 13.sp,
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -323,7 +359,10 @@ fun CategoryManagementScreen(
             text = {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 440.dp)
+                        .verticalScroll(rememberScrollState())
                 ) {
                     // Type selector in dialog
                     Row(
@@ -374,17 +413,23 @@ fun CategoryManagementScreen(
                     )
 
                     Text("Select Icon", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                    LazyRow(
+                    FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(selectableIcons) { iconKey ->
+                        selectableIcons.forEach { iconKey ->
                             val isSel = catIcon == iconKey
                             Box(
                                 modifier = Modifier
                                     .size(42.dp)
                                     .clip(CircleShape)
-                                    .background(if (isSel) MoneyMapBlue else MaterialTheme.colorScheme.surfaceVariant)
+                                    .background(if (isSel) MoneyMapBlue else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                                    .border(
+                                        width = if (isSel) 2.dp else 1.dp,
+                                        color = if (isSel) MoneyMapBlue else BorderSubtle.copy(alpha = 0.5f),
+                                        shape = CircleShape
+                                    )
                                     .clickable { catIcon = iconKey }
                                     .testTag("icon_choice_$iconKey"),
                                 contentAlignment = Alignment.Center
@@ -400,11 +445,12 @@ fun CategoryManagementScreen(
                     }
 
                     Text("Accent Color", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                    LazyRow(
+                    FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(selectableColors) { hex ->
+                        selectableColors.forEach { hex ->
                             val col = parseColorHex(hex)
                             val isSel = catColor.equals(hex, ignoreCase = true)
                             Box(
@@ -412,9 +458,23 @@ fun CategoryManagementScreen(
                                     .size(34.dp)
                                     .clip(CircleShape)
                                     .background(col)
-                                    .border(if (isSel) 3.dp else 0.dp, Color.Black, CircleShape)
-                                    .clickable { catColor = hex }
-                            )
+                                    .border(
+                                        width = if (isSel) 3.dp else 1.dp,
+                                        color = if (isSel) MaterialTheme.colorScheme.onSurface else BorderSubtle.copy(alpha = 0.4f),
+                                        shape = CircleShape
+                                    )
+                                    .clickable { catColor = hex },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isSel) {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = if (hex == "#EAB308" || hex == "#84CC16" || hex == "#34D399") Color.Black else Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -473,7 +533,10 @@ fun CategoryManagementScreen(
             text = {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 440.dp)
+                        .verticalScroll(rememberScrollState())
                 ) {
                     OutlinedTextField(
                         value = editName,
@@ -491,17 +554,23 @@ fun CategoryManagementScreen(
                     )
 
                     Text("Select Icon", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                    LazyRow(
+                    FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(selectableIcons) { iconKey ->
+                        selectableIcons.forEach { iconKey ->
                             val isSel = editIcon == iconKey
                             Box(
                                 modifier = Modifier
                                     .size(42.dp)
                                     .clip(CircleShape)
-                                    .background(if (isSel) MoneyMapBlue else MaterialTheme.colorScheme.surfaceVariant)
+                                    .background(if (isSel) MoneyMapBlue else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                                    .border(
+                                        width = if (isSel) 2.dp else 1.dp,
+                                        color = if (isSel) MoneyMapBlue else BorderSubtle.copy(alpha = 0.5f),
+                                        shape = CircleShape
+                                    )
                                     .clickable { editIcon = iconKey },
                                 contentAlignment = Alignment.Center
                             ) {
@@ -516,11 +585,12 @@ fun CategoryManagementScreen(
                     }
 
                     Text("Accent Color", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                    LazyRow(
+                    FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(selectableColors) { hex ->
+                        selectableColors.forEach { hex ->
                             val col = parseColorHex(hex)
                             val isSel = editColor.equals(hex, ignoreCase = true)
                             Box(
@@ -528,9 +598,22 @@ fun CategoryManagementScreen(
                                     .size(34.dp)
                                     .clip(CircleShape)
                                     .background(col)
-                                    .border(if (isSel) 3.dp else 0.dp, Color.Black, CircleShape)
+                                    .border(
+                                        width = if (isSel) 3.dp else 1.dp,
+                                        color = if (isSel) MaterialTheme.colorScheme.onSurface else BorderSubtle.copy(alpha = 0.4f),
+                                        shape = CircleShape
+                                    )
                                     .clickable { editColor = hex }
-                            )
+                            ) {
+                                if (isSel) {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = if (hex == "#EAB308" || hex == "#84CC16" || hex == "#34D399") Color.Black else Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }

@@ -11,7 +11,7 @@
     <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="10dp">
+        android:layout_marginBottom="8dp">
 
         <LinearLayout
             android:id="@+id/widget_quick_brand"
@@ -50,44 +50,14 @@
             android:src="@drawable/ic_widget_settings" />
     </RelativeLayout>
 
-    <!-- 3 Action Cards -->
+    <!-- First Row: Add Income, Add Expense, Add Screenshot -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
+        android:layout_marginBottom="6dp"
         android:gravity="center"
         android:orientation="horizontal">
-
-        <!-- Add Expense Button -->
-        <LinearLayout
-            android:id="@+id/btn_widget_add_expense"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_marginEnd="6dp"
-            android:layout_weight="1"
-            android:background="@drawable/bg_widget_btn_expense"
-            android:clickable="true"
-            android:focusable="true"
-            android:gravity="center"
-            android:orientation="horizontal"
-            android:paddingHorizontal="4dp"
-            android:paddingVertical="4dp">
-
-            <ImageView
-                android:layout_width="18dp"
-                android:layout_height="18dp"
-                android:contentDescription="Add Expense"
-                android:src="@drawable/ic_widget_add_expense" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
-                android:text="Expense"
-                android:textColor="#DC2626"
-                android:textSize="12sp"
-                android:textStyle="bold" />
-        </LinearLayout>
 
         <!-- Add Income Button -->
         <LinearLayout
@@ -116,17 +86,18 @@
                 android:layout_marginStart="4dp"
                 android:text="Income"
                 android:textColor="#16A34A"
-                android:textSize="12sp"
+                android:textSize="11sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
-        <!-- Transfer Button -->
+        <!-- Add Expense Button -->
         <LinearLayout
-            android:id="@+id/btn_widget_transfer"
+            android:id="@+id/btn_widget_add_expense"
             android:layout_width="0dp"
             android:layout_height="match_parent"
+            android:layout_marginEnd="6dp"
             android:layout_weight="1"
-            android:background="@drawable/bg_widget_btn_transfer"
+            android:background="@drawable/bg_widget_btn_expense"
             android:clickable="true"
             android:focusable="true"
             android:gravity="center"
@@ -137,16 +108,117 @@
             <ImageView
                 android:layout_width="18dp"
                 android:layout_height="18dp"
-                android:contentDescription="Transfer"
-                android:src="@drawable/ic_widget_transfer" />
+                android:contentDescription="Add Expense"
+                android:src="@drawable/ic_widget_add_expense" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="4dp"
-                android:text="Transfer"
+                android:text="Expense"
+                android:textColor="#DC2626"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Add Screenshot Button -->
+        <LinearLayout
+            android:id="@+id/btn_widget_add_screenshot"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@drawable/bg_widget_btn_camera"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingHorizontal="2dp"
+            android:paddingVertical="4dp">
+
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:contentDescription="Add Screenshot"
+                android:src="@drawable/ic_widget_camera" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="3dp"
+                android:text="Screenshot"
                 android:textColor="#2563EB"
-                android:textSize="12sp"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- Second Row: Add Bill Reminder, View Transactions -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:orientation="horizontal">
+
+        <!-- Add Transfer Button -->
+        <LinearLayout
+            android:id="@+id/btn_widget_add_transfer"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginEnd="6dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_widget_btn_transfer"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingHorizontal="4dp"
+            android:paddingVertical="4dp">
+
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:contentDescription="Add Transfer"
+                android:src="@drawable/ic_widget_transfer" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="3dp"
+                android:text="Transfer"
+                android:textColor="#7C3AED"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- View Transactions Button -->
+        <LinearLayout
+            android:id="@+id/btn_widget_view_transactions"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@drawable/bg_widget_btn_transactions"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingHorizontal="4dp"
+            android:paddingVertical="4dp">
+
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:contentDescription="View Transactions"
+                android:src="@drawable/ic_widget_transactions" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="3dp"
+                android:text="Transactions"
+                android:textColor="#2563EB"
+                android:textSize="10sp"
                 android:textStyle="bold" />
         </LinearLayout>
 

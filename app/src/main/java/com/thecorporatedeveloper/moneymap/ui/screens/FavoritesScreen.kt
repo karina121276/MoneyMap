@@ -24,6 +24,7 @@ import com.thecorporatedeveloper.moneymap.data.entity.AccountEntity
 import com.thecorporatedeveloper.moneymap.data.entity.CategoryEntity
 import com.thecorporatedeveloper.moneymap.data.entity.TransactionEntity
 import com.thecorporatedeveloper.moneymap.ui.components.TransactionItemRow
+import com.thecorporatedeveloper.moneymap.ui.components.DeleteTransactionConfirmationDialog
 import com.thecorporatedeveloper.moneymap.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -36,9 +37,12 @@ fun FavoritesScreen(
     onToggleFavorite: (TransactionEntity) -> Unit,
     onNavigateToDetails: (Long) -> Unit,
     onNavigateToHistory: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onNavigateToEdit: ((Long) -> Unit)? = null,
+    onDeleteTransaction: ((TransactionEntity) -> Unit)? = null
 ) {
     var searchQuery by remember { mutableStateOf("") }
+    var transactionToDelete by remember { mutableStateOf<TransactionEntity?>(null) }
 
     val categoryMap = remember(categories) { categories.associateBy { it.id } }
     val accountMap = remember(accounts) { accounts.associateBy { it.id } }
@@ -180,5 +184,13 @@ fun FavoritesScreen(
                 }
             }
         }
+    }
+
+    if (transactionToDelete != null && onDeleteTransaction != null) {
+        DeleteTransactionConfirmationDialog(
+            transaction = transactionToDelete,
+            onDismiss = { transactionToDelete = null },
+            onConfirm = { tx -> onDeleteTransaction(tx) }
+        )
     }
 }

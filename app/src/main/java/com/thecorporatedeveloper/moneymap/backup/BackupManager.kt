@@ -8,31 +8,48 @@ import com.thecorporatedeveloper.moneymap.core.model.TransactionType
 import com.thecorporatedeveloper.moneymap.data.entity.AccountEntity
 import com.thecorporatedeveloper.moneymap.data.entity.BudgetEntity
 import com.thecorporatedeveloper.moneymap.data.entity.CategoryEntity
+import com.thecorporatedeveloper.moneymap.data.entity.ReceiptEntity
 import com.thecorporatedeveloper.moneymap.data.entity.TransactionEntity
 import com.thecorporatedeveloper.moneymap.data.repository.MoneyMapRepository
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 
 object BackupManager {
 
-    private const val BACKUP_VERSION = 1
+    private const val BACKUP_VERSION = 2
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ENGLISH)
 
+    data class BackupPackageData(
+        val accounts: List<AccountEntity>,
+        val categories: List<CategoryEntity>,
+        val transactions: List<TransactionEntity>,
+        val budgets: List<BudgetEntity>,
+        val receipts: List<ReceiptEntity> = emptyList()
+    )
+
     /**
-     * Creates a full JSON string of the user's financial database.
+     * Creates a full JSON string of the user's financial database including receipts.
      */
     fun createJsonBackup(
         accounts: List<AccountEntity>,
         categories: List<CategoryEntity>,
         transactions: List<TransactionEntity>,
-        budgets: List<BudgetEntity>
+        budgets: List<BudgetEntity>,
+        receipts: List<ReceiptEntity> = emptyList()
     ): String {
+
         val root = JSONObject()
         root.put("version", BACKUP_VERSION)
         root.put("appName", "MoneyMap")
@@ -95,15 +112,44 @@ object BackupManager {
         for (b in budgets) {
             val obj = JSONObject()
             obj.put("id", b.id)
+            obj.put("name", b.name)
             obj.put("monthYear", b.monthYear)
+            obj.put("period", b.period)
+            obj.put("amountLimitPaise", b.amountLimitPaise)
+            obj.put("scope", b.scope)
+            obj.put("accountId", b.accountId ?: JSONObject.NULL)
+            obj.put("categoryId", b.categoryId ?: JSONObject.NULL)
+            obj.put("startDateEpochMillis", b.startDateEpochMillis)
+            obj.put("endDateEpochMillis", b.endDateEpochMillis)
             obj.put("totalLimitPaise", b.totalLimitPaise)
             obj.put("categoryLimitsJson", b.categoryLimitsJson)
+            obj.put("createdAt", b.createdAt)
+            obj.put("updatedAt", b.updatedAt)
             bgArray.put(obj)
         }
         root.put("budgets", bgArray)
 
+        // Receipts
+        val rcArray = JSONArray()
+        for (r in receipts) {
+            val obj = JSONObject()
+            obj.put("id", r.id)
+            obj.put("transactionId", r.transactionId)
+            obj.put("localFilePath", r.localFilePath)
+            obj.put("thumbnailPath", r.thumbnailPath ?: JSONObject.NULL)
+            obj.put("originalFileName", r.originalFileName)
+            obj.put("mimeType", r.mimeType)
+            obj.put("fileSize", r.fileSize)
+            obj.put("displayOrder", r.displayOrder)
+            obj.put("isPrimary", r.isPrimary)
+            obj.put("createdAt", r.createdAt)
+            rcArray.put(obj)
+        }
+        root.put("receipts", rcArray)
+
         return root.toString(2)
     }
+
 
     /**
      * Parses and validates JSON backup content.
@@ -179,6 +225,39 @@ object BackupManager {
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    /**
+     * Parses budget entities from a JSON backup if present.
+     */
+    fun parseBudgetsFromJson(jsonStr: String): List<BudgetEntity> {
+        val list = mutableListOf<BudgetEntity>()
+        try {
+            val root = JSONObject(jsonStr)
+            val bgArray = root.optJSONArray("budgets") ?: return emptyList()
+            for (i in 0 until bgArray.length()) {
+                val obj = bgArray.getJSONObject(i)
+                list.add(
+                    BudgetEntity(
+                        id = obj.optLong("id", 0L),
+                        name = obj.optString("name", "Monthly Budget"),
+                        monthYear = obj.optString("monthYear", ""),
+                        period = obj.optString("period", "MONTHLY"),
+                        amountLimitPaise = obj.optLong("amountLimitPaise", obj.optLong("totalLimitPaise", 0L)),
+                        scope = obj.optString("scope", "ALL_ACCOUNTS"),
+                        accountId = if (obj.isNull("accountId")) null else obj.optLong("accountId"),
+                        categoryId = if (obj.isNull("categoryId")) null else obj.optLong("categoryId"),
+                        startDateEpochMillis = obj.optLong("startDateEpochMillis", 0L),
+                        endDateEpochMillis = obj.optLong("endDateEpochMillis", 0L),
+                        totalLimitPaise = obj.optLong("totalLimitPaise", 0L),
+                        categoryLimitsJson = obj.optString("categoryLimitsJson", "{}"),
+                        createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+                        updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
+                    )
+                )
+            }
+        } catch (_: Exception) {}
+        return list
     }
 
     /**
@@ -267,4 +346,167 @@ object BackupManager {
             null
         }
     }
+
+    /**
+     * Parses receipt entities from a JSON backup if present.
+     */
+    fun parseReceiptsFromJson(jsonStr: String): List<ReceiptEntity> {
+        val list = mutableListOf<ReceiptEntity>()
+        try {
+            val root = JSONObject(jsonStr)
+            val rcArray = root.optJSONArray("receipts") ?: return emptyList()
+            for (i in 0 until rcArray.length()) {
+                val obj = rcArray.getJSONObject(i)
+                list.add(
+                    ReceiptEntity(
+                        id = obj.optLong("id", 0L),
+                        transactionId = obj.getLong("transactionId"),
+                        localFilePath = obj.getString("localFilePath"),
+                        thumbnailPath = if (obj.isNull("thumbnailPath")) null else obj.optString("thumbnailPath", null),
+                        originalFileName = obj.optString("originalFileName", ""),
+                        mimeType = obj.optString("mimeType", "image/jpeg"),
+                        fileSize = obj.optLong("fileSize", 0L),
+                        displayOrder = obj.optInt("displayOrder", 0),
+                        isPrimary = obj.optBoolean("isPrimary", false),
+                        createdAt = obj.optLong("createdAt", System.currentTimeMillis())
+                    )
+                )
+            }
+        } catch (_: Exception) {}
+        return list
+    }
+
+    /**
+     * Creates a ZIP backup containing data.json and all receipt image files.
+     */
+    fun createZipBackup(
+        context: Context,
+        destinationUri: Uri,
+        accounts: List<AccountEntity>,
+        categories: List<CategoryEntity>,
+        transactions: List<TransactionEntity>,
+        budgets: List<BudgetEntity>,
+        receipts: List<ReceiptEntity>
+    ): Result<Int> {
+        return try {
+            val jsonContent = createJsonBackup(accounts, categories, transactions, budgets, receipts)
+            var filesCount = 0
+
+
+            context.contentResolver.openOutputStream(destinationUri)?.use { os ->
+                ZipOutputStream(os).use { zos ->
+                    // 1. data.json entry
+                    val dataEntry = ZipEntry("data.json")
+                    zos.putNextEntry(dataEntry)
+                    zos.write(jsonContent.toByteArray(Charsets.UTF_8))
+                    zos.closeEntry()
+                    filesCount++
+
+                    // 2. Receipt files
+                    val filesDir = context.filesDir
+                    for (receipt in receipts) {
+                        val file = if (receipt.localFilePath.startsWith("/")) {
+                            File(receipt.localFilePath)
+                        } else {
+                            File(filesDir, receipt.localFilePath)
+                        }
+                        if (file.exists() && file.isFile) {
+                            val zipPath = receipt.localFilePath.trimStart('/')
+                            val entry = ZipEntry(zipPath)
+                            zos.putNextEntry(entry)
+                            file.inputStream().use { input ->
+                                input.copyTo(zos)
+                            }
+                            zos.closeEntry()
+                            filesCount++
+                        }
+
+                        // Thumbnail file if exists
+                        receipt.thumbnailPath?.let { thumbRelPath ->
+                            val thumbFile = if (thumbRelPath.startsWith("/")) File(thumbRelPath) else File(filesDir, thumbRelPath)
+                            if (thumbFile.exists() && thumbFile.isFile && thumbFile != file) {
+                                val entry = ZipEntry(thumbRelPath.trimStart('/'))
+                                zos.putNextEntry(entry)
+                                thumbFile.inputStream().use { input ->
+                                    input.copyTo(zos)
+                                }
+                                zos.closeEntry()
+                                filesCount++
+                            }
+                        }
+                    }
+                }
+            } ?: return Result.failure(java.io.IOException("Failed to open destination URI for backup."))
+
+            Result.success(filesCount)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Reads either a ZIP backup or a legacy JSON backup and extracts all models + receipt files.
+     */
+    fun readBackupPackage(
+        context: Context,
+        sourceUri: Uri
+    ): Result<BackupPackageData> {
+        return try {
+            var isZip = false
+            try {
+                context.contentResolver.openInputStream(sourceUri)?.use { input ->
+                    val header = ByteArray(4)
+                    val read = input.read(header)
+                    if (read == 4 && header[0] == 0x50.toByte() && header[1] == 0x4B.toByte() &&
+                        header[2] == 0x03.toByte() && header[3] == 0x04.toByte()) {
+                        isZip = true
+                    }
+                }
+            } catch (_: Exception) {}
+
+            var jsonContent: String? = null
+            if (isZip) {
+                val filesDir = context.filesDir
+                context.contentResolver.openInputStream(sourceUri)?.use { input ->
+                    ZipInputStream(input).use { zis ->
+                        var entry = zis.nextEntry
+                        while (entry != null) {
+                            val entryName = entry.name
+                            if (entryName == "data.json") {
+                                jsonContent = zis.bufferedReader(Charsets.UTF_8).readText()
+                            } else if (entryName.startsWith("receipts/")) {
+                                val targetFile = File(filesDir, entryName)
+                                targetFile.parentFile?.mkdirs()
+                                FileOutputStream(targetFile).use { out ->
+                                    zis.copyTo(out)
+                                }
+                            }
+                            zis.closeEntry()
+                            entry = zis.nextEntry
+                        }
+                    }
+                }
+            } else {
+                jsonContent = readFromUri(context, sourceUri)
+            }
+
+            if (jsonContent.isNullOrBlank()) {
+                return Result.failure(IllegalArgumentException("Backup file was empty or could not be read."))
+            }
+
+            val parseResult = parseJsonBackup(jsonContent!!)
+            if (parseResult.isFailure) {
+                return Result.failure(parseResult.exceptionOrNull() ?: Exception("Failed to parse backup JSON"))
+            }
+
+            val (accounts, categories, transactions) = parseResult.getOrThrow()
+            val budgets = parseBudgetsFromJson(jsonContent!!)
+            val receipts = parseReceiptsFromJson(jsonContent!!)
+
+            Result.success(BackupPackageData(accounts, categories, transactions, budgets, receipts))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
 }

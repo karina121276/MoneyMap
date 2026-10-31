@@ -26,8 +26,22 @@ data class UserPreferences(
     val widgetTheme: String = "LIGHT",
     val widgetHideAmounts: Boolean = false,
     val firstDayOfWeek: String = "Monday",
-    val dateFormat: String = "dd MMM yyyy"
-)
+    val dateFormat: String = "dd MMM yyyy",
+    val defaultAccountId: Long = 0L,
+    val quickAmounts: String = "100,500,1000,2000,5000",
+    val notificationHour: Int = 9,
+    val notificationMinute: Int = 0,
+    val currency: String = "INR"
+) {
+    val quickAmountsList: List<Long>
+        get() {
+            return quickAmounts.split(",")
+                .mapNotNull { it.trim().toLongOrNull() }
+                .filter { it > 0 }
+                .distinct()
+                .ifEmpty { listOf(100L, 500L, 1000L, 2000L, 5000L) }
+        }
+}
 
 class AppPreferences(private val context: Context) {
 
@@ -47,6 +61,11 @@ class AppPreferences(private val context: Context) {
         val WIDGET_HIDE_AMOUNTS = booleanPreferencesKey("widget_hide_amounts")
         val FIRST_DAY_OF_WEEK = stringPreferencesKey("first_day_of_week")
         val DATE_FORMAT = stringPreferencesKey("date_format")
+        val DEFAULT_ACCOUNT_ID = longPreferencesKey("default_account_id")
+        val QUICK_AMOUNTS = stringPreferencesKey("quick_amounts")
+        val NOTIFICATION_HOUR = intPreferencesKey("notification_hour")
+        val NOTIFICATION_MINUTE = intPreferencesKey("notification_minute")
+        val CURRENCY = stringPreferencesKey("currency")
     }
 
     val userPreferencesFlow: Flow<UserPreferences> = context.dataStore.data
@@ -73,7 +92,12 @@ class AppPreferences(private val context: Context) {
                 widgetTheme = preferences[Keys.WIDGET_THEME] ?: "LIGHT",
                 widgetHideAmounts = preferences[Keys.WIDGET_HIDE_AMOUNTS] ?: false,
                 firstDayOfWeek = preferences[Keys.FIRST_DAY_OF_WEEK] ?: "Monday",
-                dateFormat = preferences[Keys.DATE_FORMAT] ?: "dd MMM yyyy"
+                dateFormat = preferences[Keys.DATE_FORMAT] ?: "dd MMM yyyy",
+                defaultAccountId = preferences[Keys.DEFAULT_ACCOUNT_ID] ?: 0L,
+                quickAmounts = preferences[Keys.QUICK_AMOUNTS] ?: "100,500,1000,2000,5000",
+                notificationHour = preferences[Keys.NOTIFICATION_HOUR] ?: 9,
+                notificationMinute = preferences[Keys.NOTIFICATION_MINUTE] ?: 0,
+                currency = preferences[Keys.CURRENCY] ?: "INR"
             )
         }
 
@@ -127,5 +151,25 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setWidgetHideAmounts(hide: Boolean) {
         context.dataStore.edit { it[Keys.WIDGET_HIDE_AMOUNTS] = hide }
+    }
+
+    suspend fun setDefaultAccountId(accountId: Long) {
+        context.dataStore.edit { it[Keys.DEFAULT_ACCOUNT_ID] = accountId }
+    }
+
+    suspend fun setQuickAmounts(amounts: List<Long>) {
+        val str = amounts.filter { it > 0 }.distinct().joinToString(",")
+        context.dataStore.edit { it[Keys.QUICK_AMOUNTS] = str }
+    }
+
+    suspend fun setNotificationTime(hour: Int, minute: Int) {
+        context.dataStore.edit {
+            it[Keys.NOTIFICATION_HOUR] = hour
+            it[Keys.NOTIFICATION_MINUTE] = minute
+        }
+    }
+
+    suspend fun setCurrency(code: String) {
+        context.dataStore.edit { it[Keys.CURRENCY] = code }
     }
 }

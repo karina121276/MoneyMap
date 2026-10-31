@@ -47,6 +47,10 @@ import com.thecorporatedeveloper.moneymap.importer.ExtractedTransaction
 import com.thecorporatedeveloper.moneymap.importer.PdfStatementParser
 import com.thecorporatedeveloper.moneymap.importer.SmartEntryParser
 import com.thecorporatedeveloper.moneymap.security.PinSecurityManager
+import com.thecorporatedeveloper.moneymap.receipt.ReceiptStorageManager
+import com.thecorporatedeveloper.moneymap.data.entity.ReceiptEntity
+import android.widget.Toast
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.thecorporatedeveloper.moneymap.ui.screens.*
 import com.thecorporatedeveloper.moneymap.ui.theme.*
 import kotlinx.coroutines.flow.first
@@ -98,6 +102,10 @@ class MainActivity : ComponentActivity() {
                 } else {
                     window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
                 }
+            }
+
+            LaunchedEffect(userPrefs.currency) {
+                com.thecorporatedeveloper.moneymap.core.model.CurrencyFormatter.setActiveCurrency(userPrefs.currency)
             }
 
             val isDark = when (userPrefs.themeMode) {
@@ -298,8 +306,19 @@ sealed class Screen(val route: String, val title: String = "", val icon: ImageVe
     object TransactionDetails : Screen("transaction_details/{txId}") {
         fun createRoute(id: Long) = "transaction_details/$id"
     }
+    object MultipleReceipts : Screen("multiple_receipts/{txId}") {
+        fun createRoute(txId: Long) = "multiple_receipts/$txId"
+    }
+    object ReceiptViewer : Screen("receipt_viewer/{txId}?receiptId={receiptId}") {
+        fun createRoute(txId: Long, receiptId: Long? = null) =
+            if (receiptId != null) "receipt_viewer/$txId?receiptId=$receiptId" else "receipt_viewer/$txId"
+    }
 
     object Favorites : Screen("favorites", "Favorites", Icons.Default.Star)
+    object CategoryTransactions : Screen("category_transactions/{categoryId}?start={start}&end={end}&periodLabel={periodLabel}") {
+        fun createRoute(categoryId: Long, start: Long, end: Long, periodLabel: String) =
+            "category_transactions/$categoryId?start=$start&end=$end&periodLabel=${Uri.encode(periodLabel)}"
+    }
     object Categories : Screen("categories")
     object Calendar : Screen("calendar")
     object Budgets : Screen("budgets")
@@ -307,6 +326,7 @@ sealed class Screen(val route: String, val title: String = "", val icon: ImageVe
     object OcrReview : Screen("ocr_review")
     object PdfImport : Screen("pdf_import")
     object Settings : Screen("settings")
+    object CurrencySelection : Screen("currency_selection")
     object Backup : Screen("backup")
     object Privacy : Screen("privacy")
     object PinSetup : Screen("pin_setup")
@@ -340,6 +360,7 @@ fun MoneyMapApp(
     LaunchedEffect(Unit) {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             try {
+                repository.cleanUnusedPredefinedCategories()
                 repository.allAccounts.first()
             } catch (e: Exception) {}
         }
@@ -392,6 +413,7 @@ fun MoneyMapApp(
                     launchSingleTop = true
                 }
                 "settings" -> navController.navigate(Screen.Settings.route)
+                "smart_entry" -> navController.navigate(Screen.SmartEntry.route)
             }
             onClearWidgetRoute()
         }
@@ -476,7 +498,9 @@ fun MoneyMapApp(
                     },
                     onNavigateToBudgets = { navController.navigate(Screen.Budgets.route) },
                     onNavigateToSmartEntry = { navController.navigate(Screen.SmartEntry.route) },
-                    onNavigateToSettings = { navController.navigate(Screen.Settings.route) }
+                    onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
+                    onNavigateToEditTransaction = { id -> navController.navigate(Screen.EditTransaction.createRoute(id)) },
+                    onDeleteTransaction = { tx -> coroutineScope.launch { repository.deleteTransaction(tx) } }
                 )
             }
 
@@ -515,7 +539,9 @@ fun MoneyMapApp(
                         onNavigateToStatement = { navController.navigate(Screen.PdfImport.route) },
                         onNavigateToTransactionDetails = { txId ->
                             navController.navigate(Screen.TransactionDetails.createRoute(txId))
-                        }
+                        },
+                        onNavigateToEditTransaction = { id -> navController.navigate(Screen.EditTransaction.createRoute(id)) },
+                        onDeleteTransaction = { tx -> coroutineScope.launch { repository.deleteTransaction(tx) } }
                     )
                 }
             }
@@ -578,9 +604,25 @@ fun MoneyMapApp(
                     preselectedType = preselectedType,
                     accounts = accounts,
                     categories = categories,
+                    defaultAccountId = userPreferences.defaultAccountId,
+                    quickAmounts = userPreferences.quickAmountsList,
+                    onSetDefaultAccount = { accId ->
+                        coroutineScope.launch { appPreferences.setDefaultAccountId(accId) }
+                    },
+                    onUpdateQuickAmounts = { list ->
+                        coroutineScope.launch { appPreferences.setQuickAmounts(list) }
+                    },
                     onSave = { newTx ->
                         try {
                             repository.insertTransaction(newTx)
+                            true
+                        } catch (e: Exception) {
+                            false
+                        }
+                    },
+                    onSaveWithReceipts = { newTx, tempReceipts ->
+                        try {
+                            repository.insertTransactionWithReceipts(newTx, tempReceipts)
                             true
                         } catch (e: Exception) {
                             false
@@ -599,13 +641,34 @@ fun MoneyMapApp(
             ) { backStackEntry ->
                 val txId = backStackEntry.arguments?.getLong("txId") ?: 0L
                 val tx = transactions.find { it.id == txId }
+                val existingReceipts by repository.getReceiptsForTransaction(txId).collectAsStateWithLifecycle(initialValue = emptyList())
                 AddEditTransactionScreen(
                     initialTransaction = tx,
                     accounts = accounts,
                     categories = categories,
+                    existingReceipts = existingReceipts,
+                    defaultAccountId = userPreferences.defaultAccountId,
+                    quickAmounts = userPreferences.quickAmountsList,
+                    onSetDefaultAccount = { accId ->
+                        coroutineScope.launch { appPreferences.setDefaultAccountId(accId) }
+                    },
+                    onUpdateQuickAmounts = { list ->
+                        coroutineScope.launch { appPreferences.setQuickAmounts(list) }
+                    },
                     onSave = { updated ->
                         try {
                             repository.updateTransaction(updated)
+                            true
+                        } catch (e: Exception) {
+                            false
+                        }
+                    },
+                    onSaveWithReceipts = { updated, tempReceipts ->
+                        try {
+                            repository.updateTransaction(updated)
+                            for (f in tempReceipts) {
+                                repository.attachReceiptToTransaction(updated.id, f)
+                            }
                             true
                         } catch (e: Exception) {
                             false
@@ -632,7 +695,9 @@ fun MoneyMapApp(
                     onNavigateToFavorites = { navController.navigate(Screen.Favorites.route) },
                     onToggleFavorite = { tx ->
                         coroutineScope.launch { repository.toggleFavorite(tx) }
-                    }
+                    },
+                    onNavigateToEdit = { id -> navController.navigate(Screen.EditTransaction.createRoute(id)) },
+                    onDeleteTransaction = { tx -> coroutineScope.launch { repository.deleteTransaction(tx) } }
                 )
             }
 
@@ -654,7 +719,9 @@ fun MoneyMapApp(
                             popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                         }
                     },
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onNavigateToEdit = { id -> navController.navigate(Screen.EditTransaction.createRoute(id)) },
+                    onDeleteTransaction = { tx -> coroutineScope.launch { repository.deleteTransaction(tx) } }
                 )
             }
 
@@ -665,6 +732,7 @@ fun MoneyMapApp(
             ) { backStackEntry ->
                 val txId = backStackEntry.arguments?.getLong("txId") ?: 0L
                 val tx = transactions.find { it.id == txId }
+                val txReceipts by repository.getReceiptsForTransaction(txId).collectAsStateWithLifecycle(initialValue = emptyList())
                 if (tx != null) {
                     val cat = categories.find { it.id == tx.categoryId }
                     val acc = accounts.find { it.id == tx.accountId }
@@ -675,6 +743,7 @@ fun MoneyMapApp(
                         category = cat,
                         account = acc,
                         toAccount = toAcc,
+                        receipts = txReceipts,
                         hideAmounts = userPreferences.hideAmounts,
                         onBack = { navController.popBackStack() },
                         onEdit = { navController.navigate(Screen.EditTransaction.createRoute(txId)) },
@@ -696,9 +765,131 @@ fun MoneyMapApp(
                             coroutineScope.launch {
                                 repository.toggleFavorite(tx)
                             }
+                        },
+                        onViewReceipt = { receipt ->
+                            navController.navigate(Screen.ReceiptViewer.createRoute(txId, receipt.id))
+                        },
+                        onViewAllReceipts = {
+                            navController.navigate(Screen.MultipleReceipts.createRoute(txId))
+                        },
+                        onAddReceiptFile = { file ->
+                            coroutineScope.launch {
+                                repository.attachReceiptToTransaction(txId, file)
+                            }
+                        },
+                        onDeleteReceipt = { receipt ->
+                            coroutineScope.launch {
+                                repository.deleteReceipt(receipt)
+                            }
+                        },
+                        onShareReceipt = { receipt ->
+                            try {
+                                val shareUri = ReceiptStorageManager.getShareableUri(context, receipt)
+                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "image/jpeg"
+                                    putExtra(Intent.EXTRA_STREAM, shareUri)
+                                    clipData = android.content.ClipData.newRawUri("Receipt", shareUri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                val chooser = Intent.createChooser(shareIntent, "Share Receipt").apply {
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(chooser)
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Could not share receipt: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        onDownloadReceipt = { receipt ->
+                            coroutineScope.launch {
+                                val res = ReceiptStorageManager.downloadReceiptToPublicStorage(context, receipt)
+                                if (res.isSuccess) {
+                                    Toast.makeText(context, res.getOrNull() ?: "Receipt saved to Pictures", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "Failed to download receipt", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        onReplaceReceipt = { receipt, newFile ->
+                            coroutineScope.launch {
+                                repository.replaceReceiptImage(receipt, newFile)
+                            }
                         }
                     )
                 }
+            }
+
+            // Multiple Receipts Screen (Screen 9)
+            composable(
+                route = Screen.MultipleReceipts.route,
+                arguments = listOf(navArgument("txId") { type = NavType.LongType })
+            ) { backStackEntry ->
+                val txId = backStackEntry.arguments?.getLong("txId") ?: 0L
+                val txReceipts by repository.getReceiptsForTransaction(txId).collectAsStateWithLifecycle(initialValue = emptyList())
+                MultipleReceiptsScreen(
+                    receipts = txReceipts,
+                    onBack = { navController.popBackStack() },
+                    onAddMore = {
+                        navController.navigate(Screen.TransactionDetails.createRoute(txId))
+                    },
+                    onSelectReceipt = { r ->
+                        navController.navigate(Screen.ReceiptViewer.createRoute(txId, r.id))
+                    },
+                    onDeleteReceipt = { r ->
+                        coroutineScope.launch { repository.deleteReceipt(r) }
+                    }
+                )
+            }
+
+            // Receipt Viewer Screen (Screen 8)
+            composable(
+                route = Screen.ReceiptViewer.route,
+                arguments = listOf(
+                    navArgument("txId") { type = NavType.LongType },
+                    navArgument("receiptId") {
+                        type = NavType.LongType
+                        defaultValue = -1L
+                    }
+                )
+            ) { backStackEntry ->
+                val txId = backStackEntry.arguments?.getLong("txId") ?: 0L
+                val receiptId = backStackEntry.arguments?.getLong("receiptId")?.takeIf { it != -1L }
+                val txReceipts by repository.getReceiptsForTransaction(txId).collectAsStateWithLifecycle(initialValue = emptyList())
+
+                ReceiptViewerScreen(
+                    receipts = txReceipts,
+                    initialReceiptId = receiptId,
+                    onBack = { navController.popBackStack() },
+                    onDeleteReceipt = { r ->
+                        coroutineScope.launch { repository.deleteReceipt(r) }
+                    },
+                    onShareReceipt = { receipt ->
+                        try {
+                            val shareUri = ReceiptStorageManager.getShareableUri(context, receipt)
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "image/jpeg"
+                                putExtra(Intent.EXTRA_STREAM, shareUri)
+                                clipData = android.content.ClipData.newRawUri("Receipt", shareUri)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            val chooser = Intent.createChooser(shareIntent, "Share Receipt").apply {
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            context.startActivity(chooser)
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Could not share receipt: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    onDownloadReceipt = { receipt ->
+                        coroutineScope.launch {
+                            val res = ReceiptStorageManager.downloadReceiptToPublicStorage(context, receipt)
+                            if (res.isSuccess) {
+                                Toast.makeText(context, res.getOrNull() ?: "Saved to Pictures", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "Failed to download receipt", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                )
             }
 
             // Reports
@@ -709,7 +900,49 @@ fun MoneyMapApp(
                     hideAmounts = userPreferences.hideAmounts,
                     firstDayOfWeek = userPreferences.firstDayOfWeek,
                     onNavigateToCategoryBreakdown = { navController.navigate(Screen.Categories.route) },
-                    onNavigateToCalendar = { navController.navigate(Screen.Calendar.route) }
+                    onNavigateToCalendar = { navController.navigate(Screen.Calendar.route) },
+                    onNavigateToCategoryTransactions = { catId, start, end, label ->
+                        navController.navigate(Screen.CategoryTransactions.createRoute(catId, start, end, label))
+                    }
+                )
+            }
+
+            // Category Transactions (Filtered by Report Date Bounds)
+            composable(
+                route = Screen.CategoryTransactions.route,
+                arguments = listOf(
+                    navArgument("categoryId") { type = NavType.LongType },
+                    navArgument("start") { type = NavType.LongType; defaultValue = 0L },
+                    navArgument("end") { type = NavType.LongType; defaultValue = Long.MAX_VALUE },
+                    navArgument("periodLabel") { type = NavType.StringType; defaultValue = "All Time" }
+                )
+            ) { backStackEntry ->
+                val catId = backStackEntry.arguments?.getLong("categoryId") ?: 0L
+                val start = backStackEntry.arguments?.getLong("start") ?: 0L
+                val end = backStackEntry.arguments?.getLong("end") ?: Long.MAX_VALUE
+                val rawLabel = backStackEntry.arguments?.getString("periodLabel") ?: "All Time"
+                val periodLabel = Uri.decode(rawLabel)
+
+                val cat = categories.find { it.id == catId }
+                val catName = cat?.name ?: "Category"
+
+                CategoryTransactionsScreen(
+                    categoryId = catId,
+                    categoryName = catName,
+                    periodLabel = periodLabel,
+                    startEpochMillis = start,
+                    endEpochMillis = end,
+                    transactions = transactions,
+                    categories = categories,
+                    accounts = accounts,
+                    budgets = budgets,
+                    hideAmounts = userPreferences.hideAmounts,
+                    onBack = { navController.popBackStack() },
+                    onNavigateToDetails = { id ->
+                        navController.navigate(Screen.TransactionDetails.createRoute(id))
+                    },
+                    onNavigateToEditTransaction = { id -> navController.navigate(Screen.EditTransaction.createRoute(id)) },
+                    onDeleteTransaction = { tx -> coroutineScope.launch { repository.deleteTransaction(tx) } }
                 )
             }
 
@@ -821,7 +1054,19 @@ fun MoneyMapApp(
                             }
                         }
                     },
-                    onNavigateToManualAdd = { navController.navigate(Screen.AddTransaction.route) },
+                    onSaveWithReceipts = { tx, tempReceipts ->
+                        coroutineScope.launch {
+                            repository.insertTransactionWithReceipts(tx, tempReceipts)
+                            selectedImageUri = null
+                            onClearSharedImageUri()
+                            navController.navigate(Screen.History.route) {
+                                popUpTo(Screen.Home.route)
+                            }
+                        }
+                    },
+                    onNavigateToManualAdd = { _, _ ->
+                        navController.navigate(Screen.AddTransaction.route)
+                    },
                     onBack = {
                         selectedImageUri = null
                         onClearSharedImageUri()
@@ -891,24 +1136,58 @@ fun MoneyMapApp(
                             }
                         }
                     },
+                    onSetNotificationTime = { h, m ->
+                        coroutineScope.launch { appPreferences.setNotificationTime(h, m) }
+                    },
                     onNavigateToCategories = { navController.navigate(Screen.Categories.route) },
                     onNavigateToBackup = { navController.navigate(Screen.Backup.route) },
                     onNavigateToPrivacy = { navController.navigate(Screen.Privacy.route) },
                     onNavigateToWidgetSettings = { navController.navigate(Screen.Settings.route) },
+                    onSetQuickAmounts = { list ->
+                        coroutineScope.launch { appPreferences.setQuickAmounts(list) }
+                    },
+                    onNavigateToCurrency = { navController.navigate(Screen.CurrencySelection.route) },
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            // Currency Selection Screen
+            composable(Screen.CurrencySelection.route) {
+                CurrencySelectionScreen(
+                    currentCurrencyCode = userPreferences.currency,
+                    onSelectCurrency = { code ->
+                        coroutineScope.launch {
+                            appPreferences.setCurrency(code)
+                            navController.popBackStack()
+                        }
+                    },
                     onBack = { navController.popBackStack() }
                 )
             }
 
             // Backup & Restore
             composable(Screen.Backup.route) {
+                val allReceiptsList by repository.allReceipts.collectAsStateWithLifecycle(initialValue = emptyList())
                 BackupRestoreScreen(
                     accounts = accounts,
                     categories = categories,
                     transactions = transactions,
                     budgets = budgets,
+                    receipts = allReceiptsList,
                     onRestore = { restoredAccs, restoredCats, restoredTxs ->
                         coroutineScope.launch {
-                            repository.restoreAllData(restoredAccs, restoredCats, restoredTxs, emptyList())
+                            repository.restoreAllData(restoredAccs, restoredCats, restoredTxs, emptyList(), emptyList())
+                        }
+                    },
+                    onRestorePackage = { pkg ->
+                        coroutineScope.launch {
+                            repository.restoreAllData(
+                                pkg.accounts,
+                                pkg.categories,
+                                pkg.transactions,
+                                pkg.budgets,
+                                pkg.receipts
+                            )
                         }
                     },
                     onClearAllData = { onFinished ->

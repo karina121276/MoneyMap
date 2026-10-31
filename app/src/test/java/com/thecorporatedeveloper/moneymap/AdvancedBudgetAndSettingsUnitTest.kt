@@ -129,4 +129,96 @@ class AdvancedBudgetAndSettingsUnitTest {
         val prefs = UserPreferences(accentColorHex = "#00897B")
         assertEquals("#00897B", prefs.accentColorHex)
     }
+
+    @Test
+    fun testBudgetStartDateAndEndDateInclusiveCalculation() {
+        val zone = ZoneId.systemDefault()
+        val startDate = java.time.LocalDate.of(2026, 9, 2)
+        val endDate = java.time.LocalDate.of(2026, 9, 23)
+        val startMillis = startDate.atStartOfDay(zone).toInstant().toEpochMilli()
+        val endMillis = endDate.atTime(23, 59, 59, 999_000_000).atZone(zone).toInstant().toEpochMilli()
+
+        val budget = BudgetEntity(
+            id = 5L,
+            name = "Trip Budget",
+            monthYear = "2026-09",
+            amountLimitPaise = 3000000L, // ₹30,000
+            startDateEpochMillis = startMillis,
+            endDateEpochMillis = endMillis,
+            scope = "ALL_ACCOUNTS"
+        )
+
+        val beforeBudget = startDate.minusDays(1).atTime(12, 0).atZone(zone).toInstant().toEpochMilli()
+        val onFirstDay = startDate.atTime(10, 0).atZone(zone).toInstant().toEpochMilli()
+        val onMiddleDay = java.time.LocalDate.of(2026, 9, 15).atTime(14, 0).atZone(zone).toInstant().toEpochMilli()
+        val onLastDay = endDate.atTime(22, 30).atZone(zone).toInstant().toEpochMilli()
+        val afterBudget = endDate.plusDays(1).atTime(9, 0).atZone(zone).toInstant().toEpochMilli()
+
+        val txs = listOf(
+            TransactionEntity(id = 1L, type = TransactionType.EXPENSE, amountPaise = 500000L, accountId = 1L, dateEpochMillis = beforeBudget), // ₹5,000 (excluded)
+            TransactionEntity(id = 2L, type = TransactionType.EXPENSE, amountPaise = 300000L, accountId = 1L, dateEpochMillis = onFirstDay),    // ₹3,000 (included)
+            TransactionEntity(id = 3L, type = TransactionType.EXPENSE, amountPaise = 1000000L, accountId = 1L, dateEpochMillis = onMiddleDay), // ₹10,000 (included)
+            TransactionEntity(id = 4L, type = TransactionType.EXPENSE, amountPaise = 200000L, accountId = 1L, dateEpochMillis = onLastDay),    // ₹2,000 (included)
+            TransactionEntity(id = 5L, type = TransactionType.EXPENSE, amountPaise = 400000L, accountId = 1L, dateEpochMillis = afterBudget)    // ₹4,000 (excluded)
+        )
+
+        val result = com.thecorporatedeveloper.moneymap.domain.FinancialCalculator.calculateBudgetSpending(budget, txs)
+        assertEquals(1500000L, result.spentPaise) // 3,000 + 10,000 + 2,000 = 15,000
+        assertEquals(3000000L, result.limitPaise)
+        assertEquals(1500000L, result.remainingPaise)
+        assertEquals(0.5f, result.usageFraction, 0.001f)
+        assertEquals(50, result.usagePercentage)
+        assertFalse(result.isOverBudget)
+    }
+
+    @Test
+    fun testBudgetStatusUpcomingActiveCompleted() {
+        val now = System.currentTimeMillis()
+        val dayMillis = 24 * 60 * 60 * 1000L
+
+        // Upcoming: starts in future
+        val upcomingBudget = BudgetEntity(
+            id = 10L,
+            monthYear = "2026-10",
+            startDateEpochMillis = now + 5 * dayMillis,
+            endDateEpochMillis = now + 15 * dayMillis,
+            amountLimitPaise = 100000L
+        )
+        val upcomingResult = com.thecorporatedeveloper.moneymap.domain.FinancialCalculator.calculateBudgetSpending(upcomingBudget, emptyList())
+        assertEquals("UPCOMING", upcomingResult.status)
+
+        // Active: spans across now
+        val activeBudget = BudgetEntity(
+            id = 11L,
+            monthYear = "2026-10",
+            startDateEpochMillis = now - 2 * dayMillis,
+            endDateEpochMillis = now + 5 * dayMillis,
+            amountLimitPaise = 100000L
+        )
+        val activeResult = com.thecorporatedeveloper.moneymap.domain.FinancialCalculator.calculateBudgetSpending(activeBudget, emptyList())
+        assertEquals("ACTIVE", activeResult.status)
+
+        // Completed: ended in the past
+        val completedBudget = BudgetEntity(
+            id = 12L,
+            monthYear = "2026-10",
+            startDateEpochMillis = now - 15 * dayMillis,
+            endDateEpochMillis = now - 2 * dayMillis,
+            amountLimitPaise = 100000L
+        )
+        val completedResult = com.thecorporatedeveloper.moneymap.domain.FinancialCalculator.calculateBudgetSpending(completedBudget, emptyList())
+        assertEquals("COMPLETED", completedResult.status)
+    }
+
+    @Test
+    fun testCustomQuickAmountsListParsingAndFallback() {
+        val defaultPrefs = UserPreferences()
+        assertEquals(listOf(100L, 500L, 1000L, 2000L, 5000L), defaultPrefs.quickAmountsList)
+
+        val customPrefs = UserPreferences(quickAmounts = "250, 750, 1500, 3000")
+        assertEquals(listOf(250L, 750L, 1500L, 3000L), customPrefs.quickAmountsList)
+
+        val invalidPrefs = UserPreferences(quickAmounts = "abc, 0, -50")
+        assertEquals(listOf(100L, 500L, 1000L, 2000L, 5000L), invalidPrefs.quickAmountsList)
+    }
 }

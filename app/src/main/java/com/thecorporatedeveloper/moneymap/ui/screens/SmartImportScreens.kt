@@ -38,9 +38,14 @@ import com.thecorporatedeveloper.moneymap.importer.*
 import com.thecorporatedeveloper.moneymap.ui.components.getCategoryIcon
 import com.thecorporatedeveloper.moneymap.ui.components.parseColorHex
 import com.thecorporatedeveloper.moneymap.ui.theme.*
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.compose.foundation.BorderStroke
+import com.thecorporatedeveloper.moneymap.receipt.ReceiptStorageManager
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -239,22 +244,82 @@ sealed class OcrUiState {
 fun OcrReviewScreen(
     initialExtracted: ExtractedTransaction? = null,
     imageUri: Uri?,
+    initialPendingFiles: List<File> = emptyList(),
     accounts: List<AccountEntity>,
     categories: List<CategoryEntity>,
     repository: MoneyMapRepository,
-    onSave: (TransactionEntity) -> Unit,
-    onNavigateToManualAdd: () -> Unit,
+    onSave: (TransactionEntity) -> Unit = {},
+    onSaveWithReceipts: ((TransactionEntity, List<File>) -> Unit)? = null,
+    onNavigateToManualAdd: ((ExtractedTransaction?, List<File>) -> Unit)? = null,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var currentImageUri by remember(imageUri) { mutableStateOf(imageUri) }
     var uiState by remember { mutableStateOf<OcrUiState>(OcrUiState.Idle) }
+
+    var pendingReceiptFiles by remember(initialPendingFiles, imageUri) {
+        val initial = if (initialPendingFiles.isNotEmpty()) {
+            initialPendingFiles
+        } else if (imageUri != null && imageUri.scheme == "file") {
+            val f = imageUri.path?.let { File(it) }
+            if (f != null && f.exists()) listOf(f) else emptyList()
+        } else {
+            emptyList()
+        }
+        mutableStateOf<List<File>>(initial)
+    }
+
+    var showAddReceiptSheet by remember { mutableStateOf(false) }
+    var cropFileToProcess by remember { mutableStateOf<File?>(null) }
+    var tempCameraFile by remember { mutableStateOf<File?>(null) }
+    var isDocumentScanMode by remember { mutableStateOf(false) }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && tempCameraFile != null && tempCameraFile!!.exists()) {
+            if (isDocumentScanMode) {
+                coroutineScope.launch {
+                    val enhanced = ReceiptStorageManager.enhanceDocumentImage(tempCameraFile!!)
+                    cropFileToProcess = enhanced ?: tempCameraFile
+                }
+            } else {
+                cropFileToProcess = tempCameraFile
+            }
+        }
+    }
+
+    val pickMediaLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 10)
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            coroutineScope.launch {
+                val copiedFiles = mutableListOf<File>()
+                for (uri in uris) {
+                    val temp = ReceiptStorageManager.copyUriToTempFile(context, uri)
+                    if (temp != null) copiedFiles.add(temp)
+                }
+                if (copiedFiles.size == 1) {
+                    cropFileToProcess = copiedFiles.first()
+                } else if (copiedFiles.isNotEmpty()) {
+                    pendingReceiptFiles = pendingReceiptFiles + copiedFiles
+                }
+            }
+        }
+    }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { pickedUri: Uri? ->
         if (pickedUri != null) {
             currentImageUri = pickedUri
+            coroutineScope.launch {
+                val copied = ReceiptStorageManager.copyUriToTempFile(context, pickedUri)
+                if (copied != null) {
+                    pendingReceiptFiles = listOf(copied)
+                }
+            }
         }
     }
 
@@ -293,6 +358,63 @@ fun OcrReviewScreen(
         } else {
             uiState = OcrUiState.Idle
         }
+    }
+
+    if (cropFileToProcess != null) {
+        CropAndAdjustScreen(
+            imageFile = cropFileToProcess!!,
+            onCancel = { cropFileToProcess = null },
+            onDone = { confirmedFile ->
+                val existingIndex = pendingReceiptFiles.indexOf(cropFileToProcess)
+                if (existingIndex != -1) {
+                    pendingReceiptFiles = pendingReceiptFiles.toMutableList().apply { set(existingIndex, confirmedFile) }
+                } else if (!pendingReceiptFiles.contains(confirmedFile)) {
+                    pendingReceiptFiles = pendingReceiptFiles + confirmedFile
+                }
+                cropFileToProcess = null
+            }
+        )
+        return
+    }
+
+    if (showAddReceiptSheet) {
+        AddReceiptBottomSheet(
+            onDismiss = { showAddReceiptSheet = false },
+            onTakePhoto = {
+                showAddReceiptSheet = false
+                isDocumentScanMode = false
+                val temp = ReceiptStorageManager.createTempReceiptFile(context)
+                tempCameraFile = temp
+                val uri = ReceiptStorageManager.getFileProviderUri(context, temp)
+                try {
+                    cameraLauncher.launch(uri)
+                } catch (e: Exception) {
+                    android.widget.Toast.makeText(context, "Cannot open camera: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            },
+            onChooseGallery = {
+                showAddReceiptSheet = false
+                try {
+                    pickMediaLauncher.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                    )
+                } catch (e: Exception) {
+                    android.widget.Toast.makeText(context, "Cannot open gallery: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            },
+            onScanDocument = {
+                showAddReceiptSheet = false
+                isDocumentScanMode = true
+                val temp = ReceiptStorageManager.createTempReceiptFile(context)
+                tempCameraFile = temp
+                val uri = ReceiptStorageManager.getFileProviderUri(context, temp)
+                try {
+                    cameraLauncher.launch(uri)
+                } catch (e: Exception) {
+                    android.widget.Toast.makeText(context, "Cannot open camera: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -349,7 +471,7 @@ fun OcrReviewScreen(
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                         OutlinedButton(
-                            onClick = onNavigateToManualAdd,
+                            onClick = { onNavigateToManualAdd?.invoke(null, pendingReceiptFiles) },
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Text("Enter Transaction Manually")
@@ -432,7 +554,7 @@ fun OcrReviewScreen(
                             Text("Choose Another Image")
                         }
                         Spacer(modifier = Modifier.height(8.dp))
-                        TextButton(onClick = onNavigateToManualAdd) {
+                        TextButton(onClick = { onNavigateToManualAdd?.invoke(null, pendingReceiptFiles) }) {
                             Text("Enter Transaction Manually")
                         }
                     }
@@ -442,10 +564,22 @@ fun OcrReviewScreen(
                     OcrReviewForm(
                         extracted = state.extracted,
                         imageUri = currentImageUri,
+                        pendingReceiptFiles = pendingReceiptFiles,
+                        onPendingReceiptFilesChange = { pendingReceiptFiles = it },
+                        onAddMoreReceipts = { showAddReceiptSheet = true },
+                        onReceiptClick = { index ->
+                            if (index in pendingReceiptFiles.indices) {
+                                cropFileToProcess = pendingReceiptFiles[index]
+                            }
+                        },
                         duplicateCandidate = state.duplicateCandidate,
                         accounts = accounts,
                         categories = categories,
                         onSave = onSave,
+                        onSaveWithReceipts = onSaveWithReceipts,
+                        onNavigateToManualAdd = {
+                            onNavigateToManualAdd?.invoke(state.extracted, pendingReceiptFiles)
+                        },
                         onPickAnotherImage = { photoPickerLauncher.launch("image/*") }
                     )
                 }
@@ -458,10 +592,16 @@ fun OcrReviewScreen(
 private fun OcrReviewForm(
     extracted: ExtractedTransaction,
     imageUri: Uri?,
+    pendingReceiptFiles: List<File>,
+    onPendingReceiptFilesChange: (List<File>) -> Unit,
+    onAddMoreReceipts: () -> Unit,
+    onReceiptClick: (Int) -> Unit,
     duplicateCandidate: TransactionEntity?,
     accounts: List<AccountEntity>,
     categories: List<CategoryEntity>,
     onSave: (TransactionEntity) -> Unit,
+    onSaveWithReceipts: ((TransactionEntity, List<File>) -> Unit)? = null,
+    onNavigateToManualAdd: (() -> Unit)? = null,
     onPickAnotherImage: () -> Unit
 ) {
     var txType by remember(extracted) { mutableStateOf(extracted.transactionType.value) }
@@ -526,7 +666,11 @@ private fun OcrReviewForm(
                             referenceId = referenceId.ifBlank { null },
                             isImported = true
                         )
-                        onSave(tx)
+                        if (onSaveWithReceipts != null) {
+                            onSaveWithReceipts(tx, pendingReceiptFiles)
+                        } else {
+                            onSave(tx)
+                        }
                     }
                 ) {
                     Text("Save Anyway")
@@ -547,43 +691,109 @@ private fun OcrReviewForm(
         contentPadding = PaddingValues(top = 12.dp, bottom = 48.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Screenshot Thumbnail Preview
-        if (imageUri != null) {
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(140.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        // Receipt Attachment Section (Screen 1 & Screen 6: Attached Receipts Row)
+        item {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
+                    Text(
+                        text = if (pendingReceiptFiles.isNotEmpty()) "Attached Receipts (${pendingReceiptFiles.size})" else "Receipt Attachment",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp
+                    )
+                    if (onNavigateToManualAdd != null) {
+                        TextButton(
+                            onClick = onNavigateToManualAdd,
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                            modifier = Modifier.height(28.dp)
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(13.dp), tint = MoneyMapBlue)
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text("Full Add Screen", fontSize = 11.sp, color = MoneyMapBlue, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+
+                if (pendingReceiptFiles.isEmpty()) {
+                    Surface(
+                        onClick = onAddMoreReceipts,
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        border = BorderStroke(1.dp, BorderSubtle.copy(alpha = 0.6f)),
                         modifier = Modifier
-                            .fillMaxSize()
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .fillMaxWidth()
+                            .testTag("add_receipt_button_card")
                     ) {
-                        AsyncImage(
-                            model = imageUri,
-                            contentDescription = "Receipt Screenshot",
+                        Row(
                             modifier = Modifier
-                                .fillMaxHeight()
-                                .width(90.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                        )
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("UPI Payment Screenshot", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text("Details extracted locally via on-device OCR.", fontSize = 12.sp, color = TextSecondary)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            OutlinedButton(
-                                onClick = onPickAnotherImage,
-                                modifier = Modifier.height(34.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp)
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(MoneyMapBlueLight),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Text("Change Image", fontSize = 12.sp)
+                                Icon(
+                                    imageVector = Icons.Default.Receipt,
+                                    contentDescription = null,
+                                    tint = MoneyMapBlue,
+                                    modifier = Modifier.size(22.dp)
+                                )
                             }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Add Receipt (Optional)",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 14.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Take a photo or choose from gallery",
+                                    fontSize = 12.sp,
+                                    color = TextSecondary
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                tint = TextSecondary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                } else {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        border = BorderStroke(1.dp, BorderSubtle.copy(alpha = 0.6f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("attached_receipts_card")
+                    ) {
+                        Box(modifier = Modifier.padding(14.dp)) {
+                            AttachedReceiptsRow(
+                                receiptFiles = pendingReceiptFiles,
+                                receiptEntities = emptyList(),
+                                onAddMore = onAddMoreReceipts,
+                                onReceiptClick = onReceiptClick,
+                                onRemoveReceipt = { index ->
+                                    if (index in pendingReceiptFiles.indices) {
+                                        val removed = pendingReceiptFiles[index]
+                                        val updated = pendingReceiptFiles.toMutableList().apply { removeAt(index) }
+                                        onPendingReceiptFilesChange(updated)
+                                        ReceiptStorageManager.deleteTempFile(removed)
+                                    }
+                                }
+                            )
                         }
                     }
                 }
@@ -850,7 +1060,11 @@ private fun OcrReviewForm(
                             referenceId = referenceId.ifBlank { null },
                             isImported = true
                         )
-                        onSave(tx)
+                        if (onSaveWithReceipts != null) {
+                            onSaveWithReceipts(tx, pendingReceiptFiles)
+                        } else {
+                            onSave(tx)
+                        }
                     }
                 },
                 enabled = amountInput.isNotBlank() && CurrencyFormatter.parseInputToPaise(amountInput) > 0,

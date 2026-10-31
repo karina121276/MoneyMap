@@ -24,6 +24,7 @@ class MoneyMapRepository(
     private val transactionDao = database.transactionDao()
     private val budgetDao = database.budgetDao()
     private val importBatchDao = database.importBatchDao()
+    private val receiptDao = database.receiptDao()
 
     // Observables
     val allAccounts: Flow<List<AccountEntity>> = accountDao.getAllAccounts()
@@ -31,6 +32,14 @@ class MoneyMapRepository(
     val allTransactions: Flow<List<TransactionEntity>> = transactionDao.getAllTransactions()
     val favoriteTransactions: Flow<List<TransactionEntity>> = transactionDao.getFavoriteTransactions()
     val allBudgets: Flow<List<BudgetEntity>> = budgetDao.getAllBudgets()
+    val allReceipts: Flow<List<ReceiptEntity>> = receiptDao.getAllReceipts()
+
+    suspend fun getAllCategoriesList(): List<CategoryEntity> = categoryDao.getAllCategoriesList()
+
+
+    suspend fun cleanUnusedPredefinedCategories() {
+        categoryDao.deleteUnusedPredefinedCategories()
+    }
 
     suspend fun toggleFavorite(transaction: TransactionEntity) {
         transactionDao.updateFavoriteStatus(transaction.id, !transaction.isFavorite)
@@ -150,12 +159,18 @@ class MoneyMapRepository(
             transactionDao.deleteTransaction(transaction)
             notifyWidgetChanged()
         }
+        context?.let { ctx ->
+            com.thecorporatedeveloper.moneymap.receipt.ReceiptStorageManager.deleteTransactionReceiptsFolder(ctx, transaction.id)
+        }
     }
 
     suspend fun deleteTransactionById(id: Long) {
         database.withTransaction {
             transactionDao.deleteTransactionById(id)
             notifyWidgetChanged()
+        }
+        context?.let { ctx ->
+            com.thecorporatedeveloper.moneymap.receipt.ReceiptStorageManager.deleteTransactionReceiptsFolder(ctx, id)
         }
     }
 
@@ -261,15 +276,120 @@ class MoneyMapRepository(
         return candidates.firstOrNull()
     }
 
+    // Receipts
+    fun getReceiptsForTransaction(transactionId: Long): Flow<List<ReceiptEntity>> =
+        receiptDao.getReceiptsForTransaction(transactionId)
+
+    suspend fun getReceiptsListForTransaction(transactionId: Long): List<ReceiptEntity> =
+        receiptDao.getReceiptsListForTransaction(transactionId)
+
+    suspend fun getReceiptById(id: Long): ReceiptEntity? =
+        receiptDao.getReceiptById(id)
+
+    suspend fun insertReceipt(receipt: ReceiptEntity): Long =
+        receiptDao.insertReceipt(receipt)
+
+    suspend fun updateReceipt(receipt: ReceiptEntity) =
+        receiptDao.updateReceipt(receipt)
+
+    suspend fun deleteReceipt(receipt: ReceiptEntity) {
+        receiptDao.deleteReceipt(receipt)
+        context?.let { ctx ->
+            com.thecorporatedeveloper.moneymap.receipt.ReceiptStorageManager.deleteReceiptFiles(ctx, receipt)
+        }
+    }
+
+    suspend fun deleteReceiptById(id: Long) {
+        val receipt = receiptDao.getReceiptById(id)
+        if (receipt != null) {
+            deleteReceipt(receipt)
+        }
+    }
+
+    suspend fun setPrimaryReceipt(transactionId: Long, receiptId: Long) =
+        receiptDao.setPrimaryReceipt(transactionId, receiptId)
+
+    suspend fun attachReceiptToTransaction(
+        transactionId: Long,
+        tempFile: java.io.File,
+        originalName: String? = null,
+        isPrimary: Boolean = false
+    ): ReceiptEntity? {
+        val ctx = context ?: return null
+        val currentReceipts = receiptDao.getReceiptsListForTransaction(transactionId)
+        val shouldBePrimary = isPrimary || currentReceipts.isEmpty()
+        val displayOrder = currentReceipts.size
+
+        val entity = com.thecorporatedeveloper.moneymap.receipt.ReceiptStorageManager.saveConfirmedReceipt(
+            context = ctx,
+            transactionId = transactionId,
+            tempFile = tempFile,
+            originalFileName = originalName ?: "",
+            displayOrder = displayOrder,
+            isPrimary = shouldBePrimary
+        )
+        val id = receiptDao.insertReceipt(entity)
+        return entity.copy(id = id)
+    }
+
+    suspend fun insertTransactionWithReceipts(
+        transaction: TransactionEntity,
+        tempReceiptFiles: List<java.io.File>
+    ): Long {
+        return database.withTransaction {
+            val txId = insertTransaction(transaction)
+            if (context != null && tempReceiptFiles.isNotEmpty()) {
+                tempReceiptFiles.forEachIndexed { index, tempFile ->
+                    val entity = com.thecorporatedeveloper.moneymap.receipt.ReceiptStorageManager.saveConfirmedReceipt(
+                        context = context,
+                        transactionId = txId,
+                        tempFile = tempFile,
+                        originalFileName = tempFile.name,
+                        displayOrder = index,
+                        isPrimary = (index == 0)
+                    )
+                    receiptDao.insertReceipt(entity)
+                    com.thecorporatedeveloper.moneymap.receipt.ReceiptStorageManager.deleteTempFile(tempFile)
+                }
+            }
+            txId
+        }
+    }
+
+    suspend fun replaceReceiptImage(
+        receipt: ReceiptEntity,
+        newTempFile: java.io.File
+    ): ReceiptEntity? {
+        val ctx = context ?: return null
+        // Delete old files
+        com.thecorporatedeveloper.moneymap.receipt.ReceiptStorageManager.deleteReceiptFiles(ctx, receipt)
+        // Save new file
+        val updatedEntity = com.thecorporatedeveloper.moneymap.receipt.ReceiptStorageManager.saveConfirmedReceipt(
+            context = ctx,
+            transactionId = receipt.transactionId,
+            tempFile = newTempFile,
+            originalFileName = receipt.originalFileName,
+            displayOrder = receipt.displayOrder,
+            isPrimary = receipt.isPrimary
+        ).copy(id = receipt.id)
+
+        receiptDao.updateReceipt(updatedEntity)
+        return updatedEntity
+    }
+
     // Full Database Backup & Restore in Atomic Transaction
     suspend fun getAllDataForBackup(): Map<String, Any> {
         val accounts = accountDao.getAllAccountsList()
         val categories = categoryDao.getAllCategoriesList()
         val transactions = transactionDao.getAllTransactionsList()
+        val budgets = budgetDao.getAllBudgetsList()
+        val receipts = receiptDao.getAllReceiptsList()
         return mapOf(
             "accounts" to accounts,
             "categories" to categories,
-            "transactions" to transactions
+            "transactions" to transactions,
+            "budgets" to budgets,
+            "receipts" to receipts
         )
     }
 
@@ -277,7 +397,8 @@ class MoneyMapRepository(
         accounts: List<AccountEntity>,
         categories: List<CategoryEntity>,
         transactions: List<TransactionEntity>,
-        budgets: List<BudgetEntity>
+        budgets: List<BudgetEntity>,
+        receipts: List<ReceiptEntity> = emptyList()
     ) {
         database.withTransaction {
             // Restore categories first
@@ -296,20 +417,30 @@ class MoneyMapRepository(
             for (b in budgets) {
                 budgetDao.setBudget(b)
             }
+            // Restore receipts
+            for (r in receipts) {
+                receiptDao.insertReceipt(r)
+            }
         }
         notifyWidgetChanged()
     }
 
     suspend fun clearAllData() {
         database.withTransaction {
+            receiptDao.deleteAllReceipts()
             transactionDao.deleteAllTransactions()
             accountDao.deleteAllAccounts()
             categoryDao.deleteAllCategories()
             budgetDao.deleteAllBudgets()
             importBatchDao.deleteAllBatches()
         }
+        context?.let { ctx ->
+            java.io.File(ctx.filesDir, "receipts").deleteRecursively()
+            java.io.File(ctx.cacheDir, "receipt_temp").deleteRecursively()
+        }
         notifyWidgetChanged()
     }
+
 
     private fun notifyWidgetChanged() {
         context?.let { ctx ->

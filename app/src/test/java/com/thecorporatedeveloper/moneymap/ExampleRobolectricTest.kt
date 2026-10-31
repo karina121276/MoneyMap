@@ -65,14 +65,14 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun `database initial data only seeds categories and leaves accounts and transactions empty`() = runBlocking {
+    fun `database initial data leaves categories, accounts, and transactions empty`() = runBlocking {
         populateInitialData(db)
 
         val categories = db.categoryDao().getAllCategoriesList()
         val accounts = db.accountDao().getAllAccountsList()
         val transactions = db.transactionDao().getAllTransactionsList()
 
-        assertEquals(25, categories.size)
+        assertEquals(0, categories.size)
         assertTrue("Accounts must be empty on fresh install", accounts.isEmpty())
         assertTrue("Transactions must be empty on fresh install", transactions.isEmpty())
     }
@@ -120,7 +120,11 @@ class ExampleRobolectricTest {
     fun `duplicate category names are rejected case-insensitively within same type`() = runBlocking {
         populateInitialData(db)
 
-        // "Food & Dining" already exists as EXPENSE
+        repo.insertCategory(
+            CategoryEntity(name = "Food & Dining", type = TransactionType.EXPENSE, iconName = "restaurant", colorHex = "#EF4444", isCustom = true)
+        )
+
+        // "Food & Dining" exists as EXPENSE
         val isDupSameType = repo.isDuplicateCategoryName("food & dining", TransactionType.EXPENSE)
         assertTrue("Should detect duplicate for same type", isDupSameType)
 
@@ -272,6 +276,9 @@ class ExampleRobolectricTest {
     fun `expense and income selectors show only compatible categories`() = runBlocking {
         populateInitialData(db)
 
+        repo.insertCategory(CategoryEntity(name = "Food", type = TransactionType.EXPENSE, iconName = "restaurant", colorHex = "#EF4444", isCustom = true))
+        repo.insertCategory(CategoryEntity(name = "Salary", type = TransactionType.INCOME, iconName = "payments", colorHex = "#10B981", isCustom = true))
+
         val expenseCategories = repo.getActiveCategoriesByType(TransactionType.EXPENSE).first()
         val incomeCategories = repo.getActiveCategoriesByType(TransactionType.INCOME).first()
 
@@ -325,8 +332,8 @@ class ExampleRobolectricTest {
 
         // Emergency Fund (₹50,000) + Savings Bank (₹25,000) = ₹75,000 (7500000 paise)
         assertEquals(7500000L, savingsBalance)
-        // Total Assets = ₹50,000 + ₹25,000 + ₹15,000 + ₹2,000 = ₹92,000 (9200000 paise)
-        assertEquals(9200000L, totalAssets)
+        // Total Assets strictly excludes savings accounts = Regular Bank (₹15,000) + Cash (₹2,000) = ₹17,000 (1700000 paise)
+        assertEquals(1700000L, totalAssets)
     }
 
     @Test
@@ -383,7 +390,7 @@ class ExampleRobolectricTest {
         val periodSummary = FinancialCalculator.calculatePeriodSummary(listOf(transferTx))
 
         assertEquals(3000000L, savingsBal) // ₹30,000
-        assertEquals(7000000L, totalAssets) // ₹70,000 combined remains unchanged
+        assertEquals(4000000L, totalAssets) // Regular account balance = ₹40,000 (savings excluded)
         assertEquals(0L, periodSummary.totalIncomePaise) // Transfer does NOT count as income
         assertEquals(0L, periodSummary.totalExpensePaise) // Transfer does NOT count as expense
         assertEquals(0L, periodSummary.netCashFlowPaise)
@@ -410,7 +417,7 @@ class ExampleRobolectricTest {
         val totalAssets = FinancialCalculator.calculateTotalAssetBalance(accounts, listOf(transferTx))
 
         assertEquals(1500000L, savingsBal) // ₹15,000 (20k - 5k)
-        assertEquals(7000000L, totalAssets) // ₹70,000 combined remains unchanged
+        assertEquals(5500000L, totalAssets) // Regular account balance = ₹55,000 (50k + 5k, savings excluded)
     }
 
     @Test
@@ -434,7 +441,7 @@ class ExampleRobolectricTest {
 
         assertEquals(5000000L, savingsAfter) // Now counts ₹50,000 towards savings
         assertTrue("Changing classification must never create transactions", txAfter.isEmpty())
-        assertEquals(5000000L, FinancialCalculator.calculateTotalAssetBalance(accountsAfter, txAfter))
+        assertEquals(0L, FinancialCalculator.calculateTotalAssetBalance(accountsAfter, txAfter))
     }
 
     @Test

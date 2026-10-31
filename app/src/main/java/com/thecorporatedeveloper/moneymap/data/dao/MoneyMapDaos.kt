@@ -87,6 +87,9 @@ interface CategoryDao {
 
     @Query("SELECT * FROM categories WHERE LOWER(TRIM(name)) = LOWER(TRIM(:name)) AND type = :type LIMIT 1")
     suspend fun findCategoryByNameAndType(name: String, type: TransactionType): CategoryEntity?
+
+    @Query("DELETE FROM categories WHERE isCustom = 0 AND id NOT IN (SELECT DISTINCT categoryId FROM transactions WHERE categoryId IS NOT NULL) AND id NOT IN (SELECT DISTINCT categoryId FROM budgets WHERE categoryId IS NOT NULL)")
+    suspend fun deleteUnusedPredefinedCategories()
 }
 
 @Dao
@@ -189,6 +192,9 @@ interface BudgetDao {
 
     @Query("SELECT * FROM budgets ORDER BY monthYear DESC, id DESC")
     fun getAllBudgets(): Flow<List<BudgetEntity>>
+
+    @Query("SELECT * FROM budgets ORDER BY monthYear DESC, id DESC")
+    suspend fun getAllBudgetsList(): List<BudgetEntity>
 }
 
 @Dao
@@ -202,3 +208,50 @@ interface ImportBatchDao {
     @Query("DELETE FROM import_batches")
     suspend fun deleteAllBatches()
 }
+
+@Dao
+interface ReceiptDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertReceipt(receipt: ReceiptEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertReceipts(receipts: List<ReceiptEntity>): List<Long>
+
+    @Update
+    suspend fun updateReceipt(receipt: ReceiptEntity)
+
+    @Delete
+    suspend fun deleteReceipt(receipt: ReceiptEntity)
+
+    @Query("DELETE FROM receipts WHERE id = :id")
+    suspend fun deleteReceiptById(id: Long)
+
+    @Query("DELETE FROM receipts WHERE transactionId = :transactionId")
+    suspend fun deleteReceiptsForTransaction(transactionId: Long)
+
+    @Query("SELECT * FROM receipts WHERE transactionId = :transactionId ORDER BY isPrimary DESC, displayOrder ASC, id ASC")
+    fun getReceiptsForTransaction(transactionId: Long): Flow<List<ReceiptEntity>>
+
+    @Query("SELECT * FROM receipts WHERE transactionId = :transactionId ORDER BY isPrimary DESC, displayOrder ASC, id ASC")
+    suspend fun getReceiptsListForTransaction(transactionId: Long): List<ReceiptEntity>
+
+    @Query("SELECT * FROM receipts WHERE id = :id LIMIT 1")
+    suspend fun getReceiptById(id: Long): ReceiptEntity?
+
+    @Query("SELECT * FROM receipts ORDER BY id DESC")
+    fun getAllReceipts(): Flow<List<ReceiptEntity>>
+
+    @Query("SELECT * FROM receipts ORDER BY id DESC")
+    suspend fun getAllReceiptsList(): List<ReceiptEntity>
+
+    @Query("DELETE FROM receipts")
+    suspend fun deleteAllReceipts()
+
+    @Query("UPDATE receipts SET displayOrder = :order WHERE id = :id")
+    suspend fun updateDisplayOrder(id: Long, order: Int)
+
+    @Query("UPDATE receipts SET isPrimary = (id = :primaryId) WHERE transactionId = :transactionId")
+    suspend fun setPrimaryReceipt(transactionId: Long, primaryId: Long)
+}
+
+
