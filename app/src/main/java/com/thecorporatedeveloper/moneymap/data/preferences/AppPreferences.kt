@@ -16,7 +16,6 @@ data class UserPreferences(
     val userName: String = "",
     val themeMode: String = "LIGHT", // "LIGHT", "DARK", "SYSTEM"
     val accentColorHex: String = "#1E56F0",
-    val language: String = "en", // "en", "hi", "mr"
     val hideAmounts: Boolean = false,
     val appLockEnabled: Boolean = false,
     val biometricsEnabled: Boolean = false,
@@ -50,7 +49,7 @@ class AppPreferences(private val context: Context) {
         val USER_NAME = stringPreferencesKey("user_name")
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val ACCENT_COLOR = stringPreferencesKey("accent_color")
-        val LANGUAGE = stringPreferencesKey("language")
+
         val HIDE_AMOUNTS = booleanPreferencesKey("hide_amounts")
         val APP_LOCK_ENABLED = booleanPreferencesKey("app_lock_enabled")
         val BIOMETRICS_ENABLED = booleanPreferencesKey("biometrics_enabled")
@@ -82,7 +81,6 @@ class AppPreferences(private val context: Context) {
                 userName = preferences[Keys.USER_NAME] ?: "",
                 themeMode = preferences[Keys.THEME_MODE] ?: "LIGHT",
                 accentColorHex = preferences[Keys.ACCENT_COLOR] ?: "#1E56F0",
-                language = preferences[Keys.LANGUAGE] ?: "en",
                 hideAmounts = preferences[Keys.HIDE_AMOUNTS] ?: false,
                 appLockEnabled = preferences[Keys.APP_LOCK_ENABLED] ?: false,
                 biometricsEnabled = preferences[Keys.BIOMETRICS_ENABLED] ?: false,
@@ -103,9 +101,7 @@ class AppPreferences(private val context: Context) {
 
     // ... (rest of methods)
 
-    suspend fun setLanguage(lang: String) {
-        context.dataStore.edit { it[Keys.LANGUAGE] = lang }
-    }
+
 
     suspend fun setThemeMode(mode: String) {
         context.dataStore.edit { it[Keys.THEME_MODE] = mode }

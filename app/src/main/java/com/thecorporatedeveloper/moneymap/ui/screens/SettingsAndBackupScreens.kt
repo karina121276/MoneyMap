@@ -53,7 +53,6 @@ import java.util.Locale
 fun SettingsScreen(
     preferences: UserPreferences,
     onSetThemeMode: (String) -> Unit,
-    onSetLanguage: (String) -> Unit = {},
     onSetNotificationTime: (Int, Int) -> Unit = { _, _ -> },
     onNavigateToCategories: () -> Unit = {},
     onNavigateToBackup: () -> Unit,

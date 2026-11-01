@@ -74,10 +74,7 @@
     <string name="theme_dark">Dark</string>
     <string name="theme_system">System default</string>
     <string name="settings_accent_color">Accent Color</string>
-    <string name="settings_language">Language</string>
-    <string name="lang_en">English</string>
-    <string name="lang_hi">Hindi</string>
-    <string name="lang_mr">Marathi</string>
+
     <string name="settings_app_preferences">App Preferences</string>
     <string name="pref_currency">Currency</string>
     <string name="pref_currency_inr">Indian Rupee (₹)</string>
@@ -138,4 +135,16 @@
     <string name="notes_label">Notes</string>
     <string name="payment_mode_label">Payment Mode</string>
 
+    <string name="budget_limit">Limit: %s</string>
+    <string name="budget_exceeded">Exceeded by %s</string>
+    <string name="budget_remaining">Remaining: %s</string>
+    <string name="budget_used">%s used</string>
+    <string name="my_budgets">My Budgets</string>
+    <string name="monthly_budget">Monthly Budget</string>
+    <string name="set_spending_budget">Set Spending Budget</string>
+    <string name="set_spending_budget_desc">Tap to set monthly spending limit</string>
+    <string name="recent_transactions_title">Recent Transactions</string>
+    <string name="no_transactions_yet">No transactions yet. Tap + to add one!</string>
+    <string name="savings_balance">Savings Balance</string>
+    <string name="net_cash_flow">Net Cash Flow</string>
 </resources>

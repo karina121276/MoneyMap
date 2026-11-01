@@ -1116,26 +1116,6 @@ fun MoneyMapApp(
                     onSetThemeMode = { mode ->
                         coroutineScope.launch { appPreferences.setThemeMode(mode) }
                     },
-                    onSetLanguage = { lang ->
-                        coroutineScope.launch {
-                            appPreferences.setLanguage(lang)
-                            try {
-                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                                    val localeManager = context.getSystemService(android.app.LocaleManager::class.java)
-                                    localeManager?.applicationLocales = android.os.LocaleList.forLanguageTags(lang)
-                                } else {
-                                    val loc = java.util.Locale(lang)
-                                    java.util.Locale.setDefault(loc)
-                                    val config = context.resources.configuration
-                                    config.setLocale(loc)
-                                    @Suppress("DEPRECATION")
-                                    context.resources.updateConfiguration(config, context.resources.displayMetrics)
-                                }
-                            } catch (e: Exception) {
-                                java.util.Locale.setDefault(java.util.Locale(lang))
-                            }
-                        }
-                    },
                     onSetNotificationTime = { h, m ->
                         coroutineScope.launch { appPreferences.setNotificationTime(h, m) }
                     },
