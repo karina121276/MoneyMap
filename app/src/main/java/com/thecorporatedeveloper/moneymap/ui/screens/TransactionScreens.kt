@@ -1436,7 +1436,8 @@ fun TransactionHistoryScreen(
                 contentPadding = PaddingValues(top = 8.dp, bottom = 80.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                groupedGroups.forEach { group ->
+
+            groupedGroups.forEach { group ->
                     item(key = "header_${group.headingText}") {
                         Row(
                             modifier = Modifier

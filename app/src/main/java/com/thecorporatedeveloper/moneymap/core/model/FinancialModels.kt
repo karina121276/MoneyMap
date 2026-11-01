@@ -18,20 +18,15 @@ object CurrencyFormatter {
 
     fun getActiveCurrency(): String = globalCurrencyCode
 
-    // Overloaded formatRupees for backward compatibility
+    /**
+     * Formats integer paise into currency string (e.g. 12432000 paise -> "₹1,24,320" or "$124,320.00")
+     */
     fun formatRupees(
         paise: Long,
         showDecimals: Boolean = false,
         showSign: Boolean = false,
-        hideAmounts: Boolean = false
-    ): String = formatRupees(paise, globalCurrencyCode, showDecimals, showSign, hideAmounts)
-
-    fun formatRupees(
-        paise: Long,
-        currencyCode: String,
-        showDecimals: Boolean = false,
-        showSign: Boolean = false,
-        hideAmounts: Boolean = false
+        hideAmounts: Boolean = false,
+        currencyCode: String = globalCurrencyCode
     ): String {
         if (hideAmounts) return "••••••"
         val currencyInfo = CurrencyRepository.getCurrency(currencyCode)
@@ -61,18 +56,14 @@ object CurrencyFormatter {
         }
     }
 
-    // Overloaded formatTransactionAmount for backward compatibility
+    /**
+     * Formats transaction amount with explicit sign per transaction type.
+     */
     fun formatTransactionAmount(
         paise: Long,
         type: TransactionType,
-        hideAmounts: Boolean = false
-    ): String = formatTransactionAmount(paise, type, globalCurrencyCode, hideAmounts)
-
-    fun formatTransactionAmount(
-        paise: Long,
-        type: TransactionType,
-        currencyCode: String,
-        hideAmounts: Boolean = false
+        hideAmounts: Boolean = false,
+        currencyCode: String = globalCurrencyCode
     ): String {
         if (hideAmounts) return "••••••"
         val currencyInfo = CurrencyRepository.getCurrency(currencyCode)
@@ -91,16 +82,13 @@ object CurrencyFormatter {
         }
     }
 
-    // Overloaded formatCompactRupees for backward compatibility
+    /**
+     * Compact formatting for charts/widgets (e.g., $85K, $1.2M)
+     */
     fun formatCompactRupees(
         paise: Long,
-        hideAmounts: Boolean = false
-    ): String = formatCompactRupees(paise, globalCurrencyCode, hideAmounts)
-
-    fun formatCompactRupees(
-        paise: Long,
-        currencyCode: String,
-        hideAmounts: Boolean = false
+        hideAmounts: Boolean = false,
+        currencyCode: String = globalCurrencyCode
     ): String {
         if (hideAmounts) return "••••"
         val currencyInfo = CurrencyRepository.getCurrency(currencyCode)

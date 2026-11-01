@@ -102,6 +102,7 @@ fun AccountsOverviewScreen(
             contentPadding = PaddingValues(top = 8.dp, bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+
             // Total Balance & Savings Hero Card (Global balance excluding savings)
             item {
                 Card(

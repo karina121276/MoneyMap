@@ -1174,9 +1174,9 @@ fun MoneyMapApp(
                     transactions = transactions,
                     budgets = budgets,
                     receipts = allReceiptsList,
-                    onRestore = { restoredAccs, restoredCats, restoredTxs ->
+                    onRestore = { restoredAccs, restoredCats, restoredTxs, restoredBudgets ->
                         coroutineScope.launch {
-                            repository.restoreAllData(restoredAccs, restoredCats, restoredTxs, emptyList(), emptyList())
+                            repository.restoreAllData(restoredAccs, restoredCats, restoredTxs, restoredBudgets)
                         }
                     },
                     onRestorePackage = { pkg ->

@@ -137,4 +137,5 @@
     <string name="date_label">Date</string>
     <string name="notes_label">Notes</string>
     <string name="payment_mode_label">Payment Mode</string>
+
 </resources>

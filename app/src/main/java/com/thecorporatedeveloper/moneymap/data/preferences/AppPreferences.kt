@@ -101,12 +101,10 @@ class AppPreferences(private val context: Context) {
             )
         }
 
-    suspend fun setOnboardingCompleted(completed: Boolean) {
-        context.dataStore.edit { it[Keys.HAS_COMPLETED_ONBOARDING] = completed }
-    }
+    // ... (rest of methods)
 
-    suspend fun setUserName(name: String) {
-        context.dataStore.edit { it[Keys.USER_NAME] = name }
+    suspend fun setLanguage(lang: String) {
+        context.dataStore.edit { it[Keys.LANGUAGE] = lang }
     }
 
     suspend fun setThemeMode(mode: String) {
@@ -115,10 +113,6 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setAccentColor(hex: String) {
         context.dataStore.edit { it[Keys.ACCENT_COLOR] = hex }
-    }
-
-    suspend fun setLanguage(lang: String) {
-        context.dataStore.edit { it[Keys.LANGUAGE] = lang }
     }
 
     suspend fun setHideAmounts(hide: Boolean) {

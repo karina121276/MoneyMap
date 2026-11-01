@@ -33,6 +33,7 @@ import com.thecorporatedeveloper.moneymap.ui.components.TransactionItemRow
 import com.thecorporatedeveloper.moneymap.ui.components.DeleteTransactionConfirmationDialog
 import com.thecorporatedeveloper.moneymap.ui.components.MoneySproutIllustration
 import com.thecorporatedeveloper.moneymap.ui.theme.*
+
 import java.time.YearMonth
 import java.time.ZoneId
 import java.time.Instant
@@ -178,6 +179,8 @@ fun DashboardScreen(
                     }
                 }
             }
+
+
 
             // If data is loading or no accounts exist yet
             if (!isDataLoaded) {

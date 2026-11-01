@@ -196,6 +196,10 @@ fun ReportsScreen(
                 }
             }
 
+            // Ads
+
+
+
             // Donut Chart & Spending Breakdown
             item {
                 Card(
@@ -675,6 +679,9 @@ fun BudgetsScreen(
             contentPadding = PaddingValues(top = 8.dp, bottom = 40.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            item {
+
+            }
             if (budgets.isEmpty()) {
                 // Empty State Card
                 item {

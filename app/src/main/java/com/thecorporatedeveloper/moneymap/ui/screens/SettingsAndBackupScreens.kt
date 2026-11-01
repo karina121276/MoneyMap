@@ -151,7 +151,7 @@ fun SettingsScreen(
                         title = "YouTube",
                         subtitle = "Visit The Corporate Developer YouTube Channel",
                         onClick = {
-                            val url = "https://youtube.com/@the_corporatedeveloper-yt?si=m3Taz2EpSCjudzaL"
+                            val url = "https://youtube.com/@thecorporatedeveloper-yt?si=C8TMVT9e4umO6Af3"
                             try {
                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                                 context.startActivity(intent)
@@ -618,7 +618,7 @@ fun BackupRestoreScreen(
     transactions: List<TransactionEntity>,
     budgets: List<BudgetEntity>,
     receipts: List<ReceiptEntity> = emptyList(),
-    onRestore: (List<AccountEntity>, List<CategoryEntity>, List<TransactionEntity>) -> Unit,
+    onRestore: (List<AccountEntity>, List<CategoryEntity>, List<TransactionEntity>, List<BudgetEntity>) -> Unit,
     onRestorePackage: ((BackupManager.BackupPackageData) -> Unit)? = null,
     onClearAllData: (onFinished: () -> Unit) -> Unit,
     onBack: () -> Unit
@@ -850,7 +850,7 @@ fun BackupRestoreScreen(
                         if (onRestorePackage != null) {
                             onRestorePackage(pkg)
                         } else {
-                            onRestore(pkg.accounts, pkg.categories, pkg.transactions)
+                            onRestore(pkg.accounts, pkg.categories, pkg.transactions, pkg.budgets)
                         }
                         showRestoreConfirmDialog = false
                         Toast.makeText(context, "Database restored successfully!", Toast.LENGTH_SHORT).show()
