@@ -1154,14 +1154,15 @@ fun MoneyMapApp(
                     transactions = transactions,
                     budgets = budgets,
                     receipts = allReceiptsList,
-                    onRestore = { restoredAccs, restoredCats, restoredTxs, restoredBudgets ->
+                    onRestore = { isMerge, restoredAccs, restoredCats, restoredTxs, restoredBudgets ->
                         coroutineScope.launch {
-                            repository.restoreAllData(restoredAccs, restoredCats, restoredTxs, restoredBudgets)
+                            repository.restoreAllData(isMerge, restoredAccs, restoredCats, restoredTxs, restoredBudgets)
                         }
                     },
-                    onRestorePackage = { pkg ->
+                    onRestorePackage = { isMerge, pkg ->
                         coroutineScope.launch {
                             repository.restoreAllData(
+                                isMerge,
                                 pkg.accounts,
                                 pkg.categories,
                                 pkg.transactions,

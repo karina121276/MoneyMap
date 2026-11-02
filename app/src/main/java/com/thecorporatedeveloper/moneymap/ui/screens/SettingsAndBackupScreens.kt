@@ -617,8 +617,8 @@ fun BackupRestoreScreen(
     transactions: List<TransactionEntity>,
     budgets: List<BudgetEntity>,
     receipts: List<ReceiptEntity> = emptyList(),
-    onRestore: (List<AccountEntity>, List<CategoryEntity>, List<TransactionEntity>, List<BudgetEntity>) -> Unit,
-    onRestorePackage: ((BackupManager.BackupPackageData) -> Unit)? = null,
+    onRestore: (Boolean, List<AccountEntity>, List<CategoryEntity>, List<TransactionEntity>, List<BudgetEntity>) -> Unit,
+    onRestorePackage: ((Boolean, BackupManager.BackupPackageData) -> Unit)? = null,
     onClearAllData: (onFinished: () -> Unit) -> Unit,
     onBack: () -> Unit
 ) {
@@ -835,21 +835,35 @@ fun BackupRestoreScreen(
 
     if (showRestoreConfirmDialog && pendingPackageData != null) {
         val pkg = pendingPackageData!!
+        var isMerge by remember { mutableStateOf(true) }
         AlertDialog(
             onDismissRequest = { showRestoreConfirmDialog = false },
-            title = { Text("Confirm Database Restore") },
+            title = { Text("Restore Data") },
             text = {
-                val receiptText = if (pkg.receipts.isNotEmpty()) ", and ${pkg.receipts.size} receipt images" else ""
-                val budgetText = if (pkg.budgets.isNotEmpty()) ", ${pkg.budgets.size} budgets" else ""
-                Text("Found ${pkg.accounts.size} accounts, ${pkg.categories.size} categories, ${pkg.transactions.size} transactions$budgetText$receiptText. Restoring will safely update your database.")
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val receiptText = if (pkg.receipts.isNotEmpty()) ", and ${pkg.receipts.size} receipt images" else ""
+                    val budgetText = if (pkg.budgets.isNotEmpty()) ", ${pkg.budgets.size} budgets" else ""
+                    Text("Found ${pkg.accounts.size} accounts, ${pkg.categories.size} categories, ${pkg.transactions.size} transactions$budgetText$receiptText.")
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = isMerge, onClick = { isMerge = true })
+                        Text("Merge (Keep existing data)")
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = !isMerge, onClick = { isMerge = false })
+                        Text("Replace (Delete existing data)")
+                    }
+                }
             },
             confirmButton = {
                 Button(
                     onClick = {
                         if (onRestorePackage != null) {
-                            onRestorePackage(pkg)
+                            onRestorePackage(isMerge, pkg)
                         } else {
-                            onRestore(pkg.accounts, pkg.categories, pkg.transactions, pkg.budgets)
+                            onRestore(isMerge, pkg.accounts, pkg.categories, pkg.transactions, pkg.budgets)
                         }
                         showRestoreConfirmDialog = false
                         Toast.makeText(context, "Database restored successfully!", Toast.LENGTH_SHORT).show()

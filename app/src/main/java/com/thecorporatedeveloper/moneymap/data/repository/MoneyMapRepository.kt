@@ -394,6 +394,7 @@ class MoneyMapRepository(
     }
 
     suspend fun restoreAllData(
+        isMerge: Boolean,
         accounts: List<AccountEntity>,
         categories: List<CategoryEntity>,
         transactions: List<TransactionEntity>,
@@ -401,25 +402,57 @@ class MoneyMapRepository(
         receipts: List<ReceiptEntity> = emptyList()
     ) {
         database.withTransaction {
-            // Restore categories first
+            if (!isMerge) {
+                clearAllData()
+            }
+
+            // ID Mapping
+            val accIdMap = mutableMapOf<Long, Long>()
+            val catIdMap = mutableMapOf<Long, Long>()
+            val txIdMap = mutableMapOf<Long, Long>()
+
+            // Merge Categories
             for (cat in categories) {
-                categoryDao.insertCategory(cat)
+                val newCat = cat.copy(id = 0)
+                val newId = categoryDao.insertCategory(newCat)
+                catIdMap[cat.id] = newId
             }
-            // Restore accounts
+
+            // Merge Accounts
             for (acc in accounts) {
-                accountDao.insertAccount(acc)
+                val newAcc = acc.copy(id = 0)
+                val newId = accountDao.insertAccount(newAcc)
+                accIdMap[acc.id] = newId
             }
-            // Restore transactions
+
+            // Merge Transactions
             for (tx in transactions) {
-                transactionDao.insertTransaction(tx)
+                val newTx = tx.copy(
+                    id = 0,
+                    accountId = accIdMap[tx.accountId] ?: tx.accountId,
+                    categoryId = tx.categoryId?.let { catIdMap[it] } ?: tx.categoryId
+                )
+                val newId = transactionDao.insertTransaction(newTx)
+                txIdMap[tx.id] = newId
             }
-            // Restore budgets
+
+            // Merge Budgets
             for (b in budgets) {
-                budgetDao.setBudget(b)
+                val newB = b.copy(
+                    id = 0,
+                    accountId = b.accountId?.let { accIdMap[it] },
+                    categoryId = b.categoryId?.let { catIdMap[it] }
+                )
+                budgetDao.insertBudget(newB)
             }
-            // Restore receipts
+
+            // Merge Receipts
             for (r in receipts) {
-                receiptDao.insertReceipt(r)
+                val newR = r.copy(
+                    id = 0,
+                    transactionId = txIdMap[r.transactionId] ?: r.transactionId
+                )
+                receiptDao.insertReceipt(newR)
             }
         }
         notifyWidgetChanged()
