@@ -26,8 +26,16 @@ val TextSecondary = Color(0xFF64748B)
 val BorderSubtle = Color(0xFFE2E8F0)
 
 // Dark Theme Colors
-val SurfaceDark = Color(0xFF0F172A)
-val SurfaceCardDark = Color(0xFF1E293B)
-val TextPrimaryDark = Color(0xFFF8FAFC)
-val TextSecondaryDark = Color(0xFF94A3B8)
-val BorderDark = Color(0xFF334155)
+val SurfaceDark = Color(0xFF0B1220)
+val SurfaceCardDark = Color(0xFF192A40)
+val ElevatedCardDark = Color(0xFF213650)
+val InputBackgroundDark = Color(0xFF17263B)
+val BottomNavDark = Color(0xFF192E4F)
+val BorderDark = Color(0xFF34465E)
+
+val TextPrimaryDark = Color(0xFFF5F8FF)
+val TextSecondaryDark = Color(0xFFB5C3D6)
+val TextTertiaryDark = Color(0xFF8FA2BC)
+val TextDisabledDark = Color(0xFF71839C)
+val TextOnLightCardDark = Color(0xFF10213B)
+

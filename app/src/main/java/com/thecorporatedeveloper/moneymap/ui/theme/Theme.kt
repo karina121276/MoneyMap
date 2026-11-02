@@ -6,9 +6,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 private val DarkColorScheme = darkColorScheme(
-    primary = MoneyMapBlue,
+    primary = Color(0xFF4D8DFF),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFF1E3A8A),
+    primaryContainer = Color(0xFF192E4F),
     onPrimaryContainer = Color(0xFFDBEAFE),
     secondary = MoneyMapGreen,
     onSecondary = Color.White,
@@ -19,7 +19,7 @@ private val DarkColorScheme = darkColorScheme(
     surface = SurfaceCardDark,
     onBackground = TextPrimaryDark,
     onSurface = TextPrimaryDark,
-    surfaceVariant = Color(0xFF334155),
+    surfaceVariant = SurfaceCardDark,
     onSurfaceVariant = TextSecondaryDark
 )
 
